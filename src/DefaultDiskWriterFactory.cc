@@ -35,13 +35,25 @@
 #include "DefaultDiskWriterFactory.h"
 #include "DefaultDiskWriter.h"
 #include "a2functional.h"
+#include "LogFactory.h"
+#include "fmt.h"
+
+#ifdef HAVE_LIBURING
+#include "IOUringDiskWriter.h"
+#endif // HAVE_LIBURING
 
 namespace aria2 {
 
 std::unique_ptr<DiskWriter>
 DefaultDiskWriterFactory::newDiskWriter(const std::string& filename)
 {
+#ifdef HAVE_LIBURING
+  A2_LOG_INFO(fmt("Creating IOUringDiskWriter for file: %s", filename.c_str()));
+  return make_unique<IOUringDiskWriter>(filename);
+#else
+  A2_LOG_INFO(fmt("Creating DefaultDiskWriter for file: %s (io_uring not available)", filename.c_str()));
   return make_unique<DefaultDiskWriter>(filename);
+#endif // HAVE_LIBURING
 }
 
 } // namespace aria2

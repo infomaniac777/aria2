@@ -271,7 +271,8 @@ SRCS =  \
 	OpenedFileCounter.cc OpenedFileCounter.h \
 	SHA1IOFile.cc SHA1IOFile.h \
 	EvictSocketPoolCommand.cc EvictSocketPoolCommand.h\
-	libssl_compat.h
+	libssl_compat.h\
+	IOUringDiskWriter.cc IOUringDiskWriter.h
 
 if MINGW_BUILD
 SRCS += WinConsoleFile.cc WinConsoleFile.h
@@ -677,6 +678,10 @@ if HAVE_LIBUV
 SRCS += LibuvEventPoll.cc LibuvEventPoll.h
 endif # HAVE_LIBUV
 
+if HAVE_LIBURING
+SRCS += IOUringDiskWriter.cc IOUringDiskWriter.h
+endif # HAVE_LIBURING
+
 AR = @AR@
 
 if ENABLE_LIBARIA2
@@ -713,6 +718,7 @@ AM_CPPFLAGS = \
 	@LIBGCRYPT_CFLAGS@ \
 	@LIBSSH2_CFLAGS@ \
 	@LIBCARES_CFLAGS@ \
+	@LIBURING_CFLAGS@ \
 	@WSLAY_CFLAGS@ \
 	@TCMALLOC_CFLAGS@ \
 	@JEMALLOC_CFLAGS@
@@ -736,6 +742,7 @@ EXTLDADD = @ALLOCA@ \
 	@LIBGCRYPT_LIBS@ \
 	@LIBSSH2_LIBS@ \
 	@LIBCARES_LIBS@ \
+	@LIBURING_LIBS@ \
 	@WSLAY_LIBS@ \
 	@TCMALLOC_LIBS@ \
 	@JEMALLOC_LIBS@ \

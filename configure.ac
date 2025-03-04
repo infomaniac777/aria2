@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 #
 AC_PREREQ([2.67])
-AC_INIT([aria2],[1.37.0],[https://github.com/aria2/aria2/issues],[aria2],[https://aria2.github.io/])
+AC_INIT([aria2],[1.4.0],[https://github.com/aria2/aria2/issues],[aria2],[https://aria2.github.io/])
 
 AC_CANONICAL_HOST
 AC_CANONICAL_TARGET
@@ -516,6 +516,37 @@ if test "x$with_libcares" = "xyes"; then
     fi
   fi
 fi
+
+# Check for liburing
+AC_ARG_WITH([liburing],
+  [AS_HELP_STRING([--with-liburing@<:@=ARG@:>@],
+    [Use liburing (default=auto)])],
+  [with_liburing=$withval],
+  [with_liburing=auto])
+
+LIBURING_LIBS=
+AS_IF([test "x$with_liburing" != xno],
+  [AC_CHECK_HEADERS([liburing.h], [have_liburing_h=yes], [have_liburing_h=no])
+   AC_CHECK_LIB([uring], [io_uring_queue_init], 
+     [have_liburing=yes], [have_liburing=no])
+   AS_IF([test "x$have_liburing_h" = xyes -a "x$have_liburing" = xyes],
+     [AC_DEFINE([HAVE_LIBURING], [1], [Define if liburing is available])
+      LIBURING_LIBS="-luring"
+     ],
+     [AS_IF([test "x$with_liburing" = xyes], 
+       [AC_MSG_ERROR([liburing requested but not found])])])
+  ])
+LIBURING_CFLAGS=
+AS_IF([test "x$have_liburing_h" = xyes -a "x$have_liburing" = xyes],
+  [AC_DEFINE([HAVE_LIBURING], [1], [Define if liburing is available])
+   LIBURING_LIBS="-luring"
+   LIBURING_CFLAGS=""
+  ],
+  [AS_IF([test "x$with_liburing" = xyes], 
+    [AC_MSG_ERROR([liburing requested but not found])])])
+AC_SUBST([LIBURING_LIBS])
+AC_SUBST([LIBURING_CFLAGS])
+AM_CONDITIONAL([HAVE_LIBURING], [test "x$have_liburing" = "xyes"])
 
 use_md=""
 if test "x$have_appletls" = "xyes"; then
@@ -1103,6 +1134,7 @@ LibGcrypt:      $have_libgcrypt (CFLAGS='$LIBGCRYPT_CFLAGS' LIBS='$LIBGCRYPT_LIB
 LibXML2:        $have_libxml2 (CFLAGS='$LIBXML2_CFLAGS' LIBS='$LIBXML2_LIBS')
 LibExpat:       $have_libexpat (CFLAGS='$EXPAT_CFLAGS' LIBS='$EXPAT_LIBS')
 LibCares:       $have_libcares (CFLAGS='$LIBCARES_CFLAGS' LIBS='$LIBCARES_LIBS')
+LibUring:       $have_liburing (CFLAGS='$LIBURING_CFLAGS' LIBS='$LIBURING_LIBS')
 Zlib:           $have_zlib (CFLAGS='$ZLIB_CFLAGS' LIBS='$ZLIB_LIBS')
 Libssh2:        $have_libssh2 (CFLAGS='$LIBSSH2_CFLAGS' LIBS='$LIBSSH2_LIBS')
 Tcmalloc:       $have_tcmalloc (CFLAGS='$TCMALLOC_CFLAGS' LIBS='$TCMALLOC_LIBS')
