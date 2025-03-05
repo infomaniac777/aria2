@@ -23,7 +23,8 @@ IOUringDiskWriter::IOUringDiskWriter(const std::string& filename)
       filename_(filename), 
       readOnly_(false),
       queueSize_(32),
-      uringInitialized_(false)
+      uringInitialized_(false),
+      directIO_(false)
 {
 }
 
@@ -95,6 +96,14 @@ void IOUringDiskWriter::createFile(int64_t totalLength)
   
   int flags = O_CREAT | O_RDWR | O_TRUNC | O_BINARY;
   
+  // Add O_DIRECT flag when available
+#ifdef HAVE_O_DIRECT
+  if (directIO_) {
+    flags |= O_DIRECT;
+    A2_LOG_DEBUG(fmt("Direct I/O enabled for file %s", filename_.c_str()));
+  }
+#endif
+  
   fd_ = open(filename_.c_str(), flags, OPEN_MODE);
   
   if (fd_ == -1) {
@@ -124,6 +133,9 @@ void IOUringDiskWriter::openExistingFile(int64_t totalLength)
     closeFile();
   }
   
+  if (!uringInitialized_) {
+    init(); // Initialize io_uring first
+  }
   // No need to call init() here since openFile already does
   
   A2_LOG_DEBUG(fmt("Opening existing file %s", filename_.c_str()));
@@ -132,6 +144,14 @@ void IOUringDiskWriter::openExistingFile(int64_t totalLength)
   if (readOnly_) {
     flags = O_BINARY | O_RDONLY;
   }
+  
+  // Add O_DIRECT flag when available (only for read-write mode)
+#ifdef HAVE_O_DIRECT
+  if (directIO_ && !readOnly_) {
+    flags |= O_DIRECT;
+    A2_LOG_DEBUG(fmt("Direct I/O enabled for existing file %s", filename_.c_str()));
+  }
+#endif
   
   fd_ = open(filename_.c_str(), flags, OPEN_MODE);
   if (fd_ == -1) {

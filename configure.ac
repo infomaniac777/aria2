@@ -548,6 +548,20 @@ AC_SUBST([LIBURING_LIBS])
 AC_SUBST([LIBURING_CFLAGS])
 AM_CONDITIONAL([HAVE_LIBURING], [test "x$have_liburing" = "xyes"])
 
+# Check for O_DIRECT support
+AC_MSG_CHECKING([for O_DIRECT])
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+#include <fcntl.h>
+]],
+[[
+int flags = O_DIRECT;
+]])],
+[have_o_direct=yes], [have_o_direct=no])
+AC_MSG_RESULT([$have_o_direct])
+if test "x$have_o_direct" = "xyes"; then
+  AC_DEFINE([HAVE_O_DIRECT], [1], [Define to 1 if you have O_DIRECT])
+fi
+
 use_md=""
 if test "x$have_appletls" = "xyes"; then
   use_md="apple"
@@ -1144,6 +1158,7 @@ Bittorrent:     $enable_bittorrent
 Metalink:       $enable_metalink
 XML-RPC:        $enable_xml_rpc
 Message Digest: $use_md
+O Direct:       $have_o_direct
 WebSocket:      $enable_websocket (CFLAGS='$WSLAY_CFLAGS' LIBS='$WSLAY_LIBS')
 Libaria2:       $enable_libaria2 (shared=${enable_shared} static=${enable_static})
 bash_completion dir: $bashcompletiondir

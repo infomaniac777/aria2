@@ -17,6 +17,7 @@ private:
   int queueSize_;
   bool uringInitialized_;
   struct io_uring ring_;
+  bool directIO_;
 
 public:
   IOUringDiskWriter(const std::string& filename);
