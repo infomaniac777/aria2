@@ -13,23 +13,22 @@ class IOUringDiskWriter : public DiskWriter {
 private:
   int fd_;
   std::string filename_;
-  struct io_uring ring_;
   bool readOnly_;
+  int queueSize_;
   bool uringInitialized_;
-  size_t queueSize_;
-
-  void init();
+  struct io_uring ring_;
 
 public:
   IOUringDiskWriter(const std::string& filename);
   virtual ~IOUringDiskWriter();
 
-  // Required interface methods
+  virtual void init();
   virtual void initAndOpenFile(int64_t totalLength = 0) CXX11_OVERRIDE;
   virtual void openFile(int64_t totalLength = 0) CXX11_OVERRIDE;
   virtual void closeFile() CXX11_OVERRIDE;
-  virtual void openExistingFile(int64_t totalLength = 0) CXX11_OVERRIDE;
-  
+  virtual void openExistingFile(int64_t totalLength = 0);
+  void createFile(int64_t totalLength = 0);
+
   virtual void writeData(const unsigned char* data, size_t len,
                          int64_t offset) CXX11_OVERRIDE;
                          

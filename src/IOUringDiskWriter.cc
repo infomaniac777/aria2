@@ -1,7 +1,9 @@
 #include "IOUringDiskWriter.h"
+#include "RecoverableException.h"
 
 #include <unistd.h>
 #include <fcntl.h>
+#include <cassert>
 #include <sys/stat.h>
 #include <sys/types.h>
 
@@ -36,6 +38,10 @@ void IOUringDiskWriter::init()
     return;
   }
   
+  if (uringInitialized_) {
+    return;  // Already initialized
+  }
+  
   // Initialize IO_URING with queueSize_ entries
   int ret = io_uring_queue_init(queueSize_, &ring_, 0);
   if (ret < 0) {
@@ -56,21 +62,44 @@ void IOUringDiskWriter::initAndOpenFile(int64_t totalLength)
 
 void IOUringDiskWriter::openFile(int64_t totalLength)
 {
+  init(); // Initialize io_uring first
+  
+  try {
+    // First try to open as an existing file
+    openExistingFile(totalLength);
+  } 
+  catch (RecoverableException& e) {
+    if (e.getErrNum() == ENOENT) {
+      // File doesn't exist, create it
+      createFile(totalLength);
+    } 
+    else {
+      // Some other error occurred, re-throw
+      throw;
+    }
+  }
+}
+
+void IOUringDiskWriter::createFile(int64_t totalLength)
+{
   if (fd_ != -1) {
     closeFile();
   }
   
-  int flags = O_CREAT | O_BINARY | O_RDWR;
+  // No need to call init() here since openFile already does
   
-  if (readOnly_) {
-    flags = O_BINARY | O_RDONLY;
-  }
+  A2_LOG_DEBUG(fmt("Creating file %s", filename_.c_str()));
+  // Create parent directories if they don't exist
+  assert(!filename_.empty());
+  util::mkdirs(File(filename_).getDirname());
+  
+  int flags = O_CREAT | O_RDWR | O_TRUNC | O_BINARY;
   
   fd_ = open(filename_.c_str(), flags, OPEN_MODE);
   
   if (fd_ == -1) {
     int errNum = errno;
-    A2_LOG_ERROR(fmt("Failed to open file %s, cause: %s", 
+    A2_LOG_ERROR(fmt("Failed to create file %s, cause: %s", 
                     filename_.c_str(), util::safeStrerror(errNum).c_str()));
     throw DL_ABORT_EX(fmt(EX_FILE_OPEN, filename_.c_str(), 
                           util::safeStrerror(errNum).c_str()));
@@ -86,7 +115,7 @@ void IOUringDiskWriter::openFile(int64_t totalLength)
                             filename_.c_str(), totalLength));
     }
   }
-  A2_LOG_DEBUG(fmt("File %s opened with fd %d", filename_.c_str(), fd_));
+  A2_LOG_DEBUG(fmt("File %s created with fd %d", filename_.c_str(), fd_));
 }
 
 void IOUringDiskWriter::openExistingFile(int64_t totalLength) 
@@ -94,6 +123,10 @@ void IOUringDiskWriter::openExistingFile(int64_t totalLength)
   if (fd_ != -1) {
     closeFile();
   }
+  
+  // No need to call init() here since openFile already does
+  
+  A2_LOG_DEBUG(fmt("Opening existing file %s", filename_.c_str()));
   
   int flags = O_BINARY | O_RDWR;
   if (readOnly_) {
@@ -103,9 +136,16 @@ void IOUringDiskWriter::openExistingFile(int64_t totalLength)
   fd_ = open(filename_.c_str(), flags, OPEN_MODE);
   if (fd_ == -1) {
     int errNum = errno;
-    throw DL_ABORT_EX(fmt(EX_FILE_OPEN, filename_.c_str(),
-                        util::safeStrerror(errNum).c_str()));
+    A2_LOG_DEBUG(fmt("Failed to open file %s, cause: %s", 
+                    filename_.c_str(), util::safeStrerror(errNum).c_str()));
+    // The correct way to create a RecoverableException with file/line information
+    RecoverableException e(__FILE__, __LINE__, errNum,
+                         fmt(EX_FILE_OPEN, filename_.c_str(),
+                             util::safeStrerror(errNum).c_str()));
+    throw e;
   }
+  
+  A2_LOG_DEBUG(fmt("Existing file %s opened with fd %d", filename_.c_str(), fd_));
 }
 
 void IOUringDiskWriter::closeFile()
@@ -133,6 +173,11 @@ void IOUringDiskWriter::writeData(const unsigned char* data, size_t len, int64_t
   
   if (readOnly_) {
     throw DL_ABORT_EX(fmt("Cannot write to file %s: read-only mode", 
+                          filename_.c_str()));
+  }
+  
+  if (!uringInitialized_) {
+    throw DL_ABORT_EX(fmt("Cannot write to file %s: io_uring not initialized", 
                           filename_.c_str()));
   }
   
