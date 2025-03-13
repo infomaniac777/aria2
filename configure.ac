@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 #
 AC_PREREQ([2.67])
-AC_INIT([aria2],[1.37.0],[https://github.com/aria2/aria2/issues],[aria2],[https://aria2.github.io/])
+AC_INIT([aria2],[1.5.0],[https://github.com/aria2/aria2/issues],[aria2],[https://aria2.github.io/])
 
 AC_CANONICAL_HOST
 AC_CANONICAL_TARGET
@@ -952,6 +952,17 @@ event.udata = reinterpret_cast<intptr_t>(&event);
        AC_DEFINE([KEVENT_UDATA_INTPTR_T], [1], [Define to 1 if struct kevent.udata is intptr_t])
     fi
 fi
+
+# Check for IO_uring
+AC_CHECK_HEADERS([liburing.h], [have_iouring_header=yes], [have_iouring_header=no])
+if test "x$have_iouring_header" = "xyes"; then
+  AC_CHECK_LIB([uring], [io_uring_queue_init], [have_iouring=yes], [have_iouring=no])
+  if test "x$have_iouring" = "xyes"; then
+    AC_DEFINE([HAVE_IOURING], [1], [Define to 1 if io_uring is available.])
+    EXTRALIBS="$EXTRALIBS -luring"
+  fi
+fi
+AM_CONDITIONAL([HAVE_IOURING], [test "x$have_iouring" = "xyes"])
 
 AC_CHECK_MEMBER([struct sockaddr_in.sin_len],
                 [AC_DEFINE([HAVE_SOCKADDR_IN_SIN_LEN],[1],

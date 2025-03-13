@@ -58,6 +58,9 @@
 #include "DownloadContext.h"
 #include "array_fun.h"
 #include "EvictSocketPoolCommand.h"
+#ifdef HAVE_IOURING
+#  include "IOUringEventPoll.h"
+#endif // HAVE_IOURING
 #ifdef HAVE_LIBUV
 #  include "LibuvEventPoll.h"
 #endif // HAVE_LIBUV
@@ -87,6 +90,18 @@ namespace {
 std::unique_ptr<EventPoll> createEventPoll(Option* op)
 {
   const std::string& pollMethod = op->get(PREF_EVENT_POLL);
+  #ifdef HAVE_IOURING
+  if (pollMethod == V_IOURING) {
+    auto ep = make_unique<IoUringEventPoll>();
+    if (!ep->good()) {
+      throw DL_ABORT_EX("Initializing IOUringEventPoll failed."
+                        " Try --event-poll=select");
+    }
+    A2_LOG_NOTICE("Using io_uring event poll");
+    return std::move(ep);
+  }
+  else
+#endif // HAVE_IOURING
 #ifdef HAVE_LIBUV
   if (pollMethod == V_LIBUV) {
     auto ep = make_unique<LibuvEventPoll>();
@@ -94,6 +109,7 @@ std::unique_ptr<EventPoll> createEventPoll(Option* op)
       throw DL_ABORT_EX("Initializing LibuvEventPoll failed."
                         " Try --event-poll=select");
     }
+    A2_LOG_NOTICE("Using libuv event poll");
     return std::move(ep);
   }
   else
@@ -105,6 +121,7 @@ std::unique_ptr<EventPoll> createEventPoll(Option* op)
       throw DL_ABORT_EX("Initializing EpollEventPoll failed."
                         " Try --event-poll=select");
     }
+    A2_LOG_NOTICE("Using epoll event poll");
     return std::move(ep);
   }
   else
@@ -116,6 +133,7 @@ std::unique_ptr<EventPoll> createEventPoll(Option* op)
       throw DL_ABORT_EX("Initializing KqueueEventPoll failed."
                         " Try --event-poll=select");
     }
+    A2_LOG_NOTICE("Using kqueue event poll");
     return std::move(kp);
   }
   else
@@ -127,17 +145,20 @@ std::unique_ptr<EventPoll> createEventPoll(Option* op)
       throw DL_ABORT_EX("Initializing PortEventPoll failed."
                         " Try --event-poll=select");
     }
+    A2_LOG_NOTICE("Using port event poll");
     return std::move(pp);
   }
   else
 #endif // HAVE_PORT_ASSOCIATE
 #ifdef HAVE_POLL
       if (pollMethod == V_POLL) {
+    A2_LOG_NOTICE("Using poll event poll");
     return make_unique<PollEventPoll>();
   }
   else
 #endif // HAVE_POLL
     if (pollMethod == V_SELECT) {
+      A2_LOG_NOTICE("Using select event poll");
       return make_unique<SelectEventPoll>();
     }
   assert(0);

@@ -291,6 +291,8 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
                                                  V_PORT,
 #elif defined(HAVE_LIBUV)
                                                  V_LIBUV,
+#elif defined(HAVE_IOURING)
+                                                 V_IOURING,
 #elif defined(HAVE_POLL)
                                                  V_POLL,
 #else  // defined(HAVE_EPOLL)
@@ -309,6 +311,9 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
 #ifdef HAVE_LIBUV
                                                      V_LIBUV,
 #endif // HAVE_LIBUV
+#ifdef HAVE_IOURING
+                                                     V_IOURING,
+#endif // HAVE_IOURING
 #ifdef HAVE_POLL
                                                      V_POLL,
 #endif // HAVE_POLL

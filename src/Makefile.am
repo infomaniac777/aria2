@@ -673,6 +673,10 @@ if HAVE_KQUEUE
 SRCS += KqueueEventPoll.cc KqueueEventPoll.h
 endif # HAVE_KQUEUE
 
+if HAVE_IOURING
+SRCS += IOUringEventPoll.cc IOUringEventPoll.h
+endif # HAVE_IOURING
+
 if HAVE_LIBUV
 SRCS += LibuvEventPoll.cc LibuvEventPoll.h
 endif # HAVE_LIBUV
