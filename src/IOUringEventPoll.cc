@@ -155,28 +155,25 @@ void IoUringEventPoll::poll(const struct timeval& tv)
   unsigned count = 0;
   io_uring_for_each_cqe(&ring_, head, cqe) {
     if (cqe->user_data != 0) {
-      KSocketEntry* socketEntry = reinterpret_cast<KSocketEntry*>(cqe->user_data);
+      // Get the socket fd from user_data
+      sock_t socket = static_cast<sock_t>(cqe->user_data);
       
-      // Convert result to events
-      uint32_t events = 0;
-      if (cqe->res & POLLIN) {
-        events |= IEV_READ;
+      // Look up the socket entry
+      auto it = socketEntries_.find(socket);
+      if (it != std::end(socketEntries_)) {
+        // Convert result to events
+        uint32_t events = 0;
+        if (cqe->res & POLLIN) events |= IEV_READ;
+        if (cqe->res & POLLOUT) events |= IEV_WRITE;
+        if (cqe->res & POLLERR) events |= IEV_ERROR;
+        if (cqe->res & POLLHUP) events |= IEV_HUP;
+        
+        // Process the events
+        it->second.processEvents(events);
+        
+        // Mark as unregistered so it will be re-added
+        it->second.registered = false;
       }
-      if (cqe->res & POLLOUT) {
-        events |= IEV_WRITE;
-      }
-      if (cqe->res & POLLERR) {
-        events |= IEV_ERROR;
-      }
-      if (cqe->res & POLLHUP) {
-        events |= IEV_HUP;
-      }
-      
-      // Process the events
-      socketEntry->processEvents(events);
-      
-      // Mark as unregistered so it will be re-added
-      socketEntry->registered = false;
     }
     count++;
   }
@@ -198,7 +195,7 @@ void IoUringEventPoll::poll(const struct timeval& tv)
       
       // Use poll_add for monitoring the socket
       io_uring_prep_poll_add(sqe, entry.second.getSocket(), events);
-      io_uring_sqe_set_data(sqe, &entry.second);
+      io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(static_cast<uintptr_t>(entry.first)));
       entry.second.registered = true;
     }
   }
@@ -239,8 +236,8 @@ bool IoUringEventPoll::addEvents(sock_t socket,
       }
       
       // Use poll_add for monitoring the socket
-      io_uring_prep_poll_add(sqe, socketEntry.getSocket(), POLLIN | POLLOUT);
-      io_uring_sqe_set_data(sqe, &socketEntry);
+      io_uring_prep_poll_add(sqe, socketEntry.getSocket(), socketEntry.getEvents());
+      io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(static_cast<uintptr_t>(socket)));
       socketEntry.registered = true;
       
       // Submit the request
@@ -265,9 +262,9 @@ bool IoUringEventPoll::addEvents(sock_t socket,
       A2_LOG_DEBUG(fmt("Failed to get SQE for socket %d", socket));
       return false;
     }
-    
-    io_uring_prep_poll_add(sqe, socketEntry.getSocket(), POLLIN | POLLOUT);
-    io_uring_sqe_set_data(sqe, &socketEntry);
+
+    io_uring_prep_poll_add(sqe, socketEntry.getSocket(), socketEntry.getEvents());
+    io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(static_cast<uintptr_t>(socket)));
     socketEntry.registered = true;
     
     // Submit the request
@@ -321,7 +318,11 @@ bool IoUringEventPoll::deleteEvents(sock_t socket,
       }
       
       // Use poll_remove to cancel the monitoring
-      io_uring_prep_poll_remove(sqe, reinterpret_cast<__u64>(&socketEntry));
+      // For poll_remove, we still need to provide the user_data from the original registration
+      io_uring_prep_poll_remove(sqe, static_cast<__u64>(socket));
+
+      // And use the socket fd as user_data for this operation as well
+      io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(static_cast<uintptr_t>(socket)));
       io_uring_submit(&ring_);
       socketEntry.registered = false;
     }
