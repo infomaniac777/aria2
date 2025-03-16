@@ -19,7 +19,7 @@
 
 #include <map>
 #include <memory>
-#include <set>
+#include <unordered_set>
 #include <liburing.h>
 #include <poll.h> // For POLLIN, POLLOUT flags
 
@@ -48,8 +48,6 @@ private:
 
     KSocketEntry(const KSocketEntry&) = delete;
     KSocketEntry(KSocketEntry&&) = default;
-
-    bool registered; // Track whether this socket is currently registered with io_uring
     uint32_t getEvents();
   };
 
@@ -58,6 +56,8 @@ private:
 private:
   typedef std::map<sock_t, KSocketEntry> KSocketEntrySet;
   KSocketEntrySet socketEntries_;
+
+  std::unordered_set<sock_t> socketsNeedingRegistration_;
 
 #ifdef ENABLE_ASYNC_DNS
   typedef std::map<std::pair<AsyncNameResolver*, Command*>,

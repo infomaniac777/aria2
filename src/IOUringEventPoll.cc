@@ -53,7 +53,7 @@ namespace aria2 {
 #define IO_URING_ENTRIES 256
 
 IoUringEventPoll::KSocketEntry::KSocketEntry(sock_t s)
-    : SocketEntry<KCommandEvent, KADNSEvent>(s), registered(false)
+    : SocketEntry<KCommandEvent, KADNSEvent>(s)
 {
 }
 
@@ -172,7 +172,7 @@ void IoUringEventPoll::poll(const struct timeval& tv)
         it->second.processEvents(events);
         
         // Mark as unregistered so it will be re-added
-        it->second.registered = false;
+        socketsNeedingRegistration_.insert(socket);
       }
     }
     count++;
@@ -180,25 +180,26 @@ void IoUringEventPoll::poll(const struct timeval& tv)
   
   // Mark that we've consumed these events
   io_uring_cq_advance(&ring_, count);
-  
   // Re-register sockets that need monitoring
-  for (auto& entry : socketEntries_) {
-    if (!entry.second.eventEmpty() && !entry.second.registered) {
-      struct io_uring_sqe *sqe = io_uring_get_sqe(&ring_);
-      if (!sqe) {
-        A2_LOG_DEBUG(fmt("Failed to get SQE for socket %d", entry.first));
-        continue;
-      }
-      
-      // Determine which events to monitor
-      uint32_t events = entry.second.getEvents();
-      
-      // Use poll_add for monitoring the socket
-      io_uring_prep_poll_add(sqe, entry.second.getSocket(), events);
-      io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(static_cast<uintptr_t>(entry.first)));
-      entry.second.registered = true;
+  auto it = socketsNeedingRegistration_.begin();
+  while (it != socketsNeedingRegistration_.end()) {
+    sock_t socket = *it;
+    it = socketsNeedingRegistration_.erase(it); // it now points to next element
+    
+    auto entryIt = socketEntries_.find(socket);
+    if (entryIt == socketEntries_.end() || entryIt->second.eventEmpty()) {
+      continue;
     }
-  }
+    
+    struct io_uring_sqe *sqe = io_uring_get_sqe(&ring_);
+    if (sqe) {
+      uint32_t events = entryIt->second.getEvents();
+      io_uring_prep_poll_add(sqe, entryIt->second.getSocket(), events);
+      io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(static_cast<uintptr_t>(socket)));
+    }
+  }  
+  
+
   
   // Submit the new monitoring requests
   ret = io_uring_submit(&ring_);
@@ -216,6 +217,7 @@ void IoUringEventPoll::poll(const struct timeval& tv)
     ent.addSocketEvents(this);
   }
 #endif
+
 }
 
 bool IoUringEventPoll::addEvents(sock_t socket,
@@ -226,8 +228,7 @@ bool IoUringEventPoll::addEvents(sock_t socket,
     auto& socketEntry = (*i).second;
     event.addSelf(&socketEntry);
     
-    // If already registered with io_uring, we'll update on next poll cycle
-    if (!socketEntry.registered) {
+    if (socketsNeedingRegistration_.count(socket)) {
       // Register with io_uring for POLLIN events
       struct io_uring_sqe *sqe = io_uring_get_sqe(&ring_);
       if (!sqe) {
@@ -238,14 +239,14 @@ bool IoUringEventPoll::addEvents(sock_t socket,
       // Use poll_add for monitoring the socket
       io_uring_prep_poll_add(sqe, socketEntry.getSocket(), socketEntry.getEvents());
       io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(static_cast<uintptr_t>(socket)));
-      socketEntry.registered = true;
+      socketsNeedingRegistration_.erase(socket);
       
       // Submit the request
       int ret = io_uring_submit(&ring_);
       if (ret < 0) {
         A2_LOG_DEBUG(fmt("Failed to submit io_uring request for socket %d: %s", 
                        socket, util::safeStrerror(-ret).c_str()));
-        socketEntry.registered = false;
+        socketsNeedingRegistration_.insert(socket);
         return false;
       }
     }
@@ -265,14 +266,14 @@ bool IoUringEventPoll::addEvents(sock_t socket,
 
     io_uring_prep_poll_add(sqe, socketEntry.getSocket(), socketEntry.getEvents());
     io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(static_cast<uintptr_t>(socket)));
-    socketEntry.registered = true;
+    socketsNeedingRegistration_.erase(socket);
     
     // Submit the request
     int ret = io_uring_submit(&ring_);
     if (ret < 0) {
       A2_LOG_DEBUG(fmt("Failed to submit io_uring request for socket %d: %s", 
                      socket, util::safeStrerror(-ret).c_str()));
-      socketEntry.registered = false;
+      socketsNeedingRegistration_.insert(socket);
       return false;
     }
   }
@@ -309,7 +310,7 @@ bool IoUringEventPoll::deleteEvents(sock_t socket,
   
   if (socketEntry.eventEmpty()) {
     // If the socket has no more events, remove it from io_uring monitoring
-    if (socketEntry.registered) {
+    if (!socketsNeedingRegistration_.count(socket)) {
       // We need to cancel the ongoing poll operation
       struct io_uring_sqe *sqe = io_uring_get_sqe(&ring_);
       if (!sqe) {
@@ -324,7 +325,10 @@ bool IoUringEventPoll::deleteEvents(sock_t socket,
       // And use the socket fd as user_data for this operation as well
       io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(static_cast<uintptr_t>(socket)));
       io_uring_submit(&ring_);
-      socketEntry.registered = false;
+    }
+    else {
+      // Socket is already marked for re-registration
+      socketsNeedingRegistration_.erase(socket);
     }
     
     // Remove from our tracking
