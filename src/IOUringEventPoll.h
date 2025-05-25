@@ -58,6 +58,7 @@ private:
   KSocketEntrySet socketEntries_;
 
   std::unordered_set<sock_t> socketsNeedingRegistration_;
+  bool needSubmission_;
 
 #ifdef ENABLE_ASYNC_DNS
   typedef std::map<std::pair<AsyncNameResolver*, Command*>,

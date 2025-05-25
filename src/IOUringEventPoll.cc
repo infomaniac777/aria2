@@ -104,7 +104,7 @@ uint32_t IoUringEventPoll::KSocketEntry::getEvents()
 
 
 IoUringEventPoll::IoUringEventPoll()
-    : ringEntriesSize_(IO_URING_ENTRIES)
+    : ringEntriesSize_(IO_URING_ENTRIES), needSubmission_(false)
 {
   // Initialize io_uring instance
   int ret = io_uring_queue_init(ringEntriesSize_, &ring_, 0);
@@ -133,18 +133,21 @@ void IoUringEventPoll::poll(const struct timeval& tv)
   ts.tv_sec = tv.tv_sec;
   ts.tv_nsec = tv.tv_usec * 1000;
   
-  // Submit any pending operations
-  int ret = io_uring_submit(&ring_);
-  if (ret < 0) {
-    A2_LOG_INFO(fmt("io_uring_submit error: %s", 
-                  util::safeStrerror(-ret).c_str()));
+  // Only submit if needed
+  if (needSubmission_) {
+    int ret = io_uring_submit(&ring_);
+    if (ret < 0) {
+      A2_LOG_INFO(fmt("io_uring_submit error: %s", 
+                    util::safeStrerror(-ret).c_str()));
+    }
+    needSubmission_ = false;
   }
   
   // Process completions
   struct io_uring_cqe *cqe = nullptr;
   
   // Wait for events with timeout
-  ret = io_uring_wait_cqe_timeout(&ring_, &cqe, &ts);
+  int ret = io_uring_wait_cqe_timeout(&ring_, &cqe, &ts);
   if (ret < 0 && ret != -ETIME) {
     A2_LOG_INFO(fmt("io_uring_wait_cqe_timeout error: %s", 
                   util::safeStrerror(-ret).c_str()));
@@ -196,6 +199,7 @@ void IoUringEventPoll::poll(const struct timeval& tv)
       uint32_t events = entryIt->second.getEvents();
       io_uring_prep_poll_add(sqe, entryIt->second.getSocket(), events);
       io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(static_cast<uintptr_t>(socket)));
+      needSubmission_ = true;
     }
   }  
   
@@ -218,6 +222,11 @@ void IoUringEventPoll::poll(const struct timeval& tv)
   }
 #endif
 
+  // Submit once more at the end if needed
+  if (needSubmission_) {
+    io_uring_submit(&ring_);
+    needSubmission_ = false;
+  }
 }
 
 bool IoUringEventPoll::addEvents(sock_t socket,
@@ -241,14 +250,8 @@ bool IoUringEventPoll::addEvents(sock_t socket,
       io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(static_cast<uintptr_t>(socket)));
       socketsNeedingRegistration_.erase(socket);
       
-      // Submit the request
-      int ret = io_uring_submit(&ring_);
-      if (ret < 0) {
-        A2_LOG_DEBUG(fmt("Failed to submit io_uring request for socket %d: %s", 
-                       socket, util::safeStrerror(-ret).c_str()));
-        socketsNeedingRegistration_.insert(socket);
-        return false;
-      }
+      // Set flag for submission
+      needSubmission_ = true;
     }
   } else {
     // New socket entry
@@ -268,14 +271,8 @@ bool IoUringEventPoll::addEvents(sock_t socket,
     io_uring_sqe_set_data(sqe, reinterpret_cast<void*>(static_cast<uintptr_t>(socket)));
     socketsNeedingRegistration_.erase(socket);
     
-    // Submit the request
-    int ret = io_uring_submit(&ring_);
-    if (ret < 0) {
-      A2_LOG_DEBUG(fmt("Failed to submit io_uring request for socket %d: %s", 
-                     socket, util::safeStrerror(-ret).c_str()));
-      socketsNeedingRegistration_.insert(socket);
-      return false;
-    }
+    // Set flag for submission
+    needSubmission_ = true;
   }
   
   return true;
