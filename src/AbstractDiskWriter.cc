@@ -37,6 +37,7 @@
 #include <unistd.h>
 #ifdef HAVE_MMAP
 #  include <sys/mman.h>
+#  include <sys/statfs.h>
 #endif // HAVE_MMAP
 #include <fcntl.h>
 
@@ -60,14 +61,16 @@ AbstractDiskWriter::AbstractDiskWriter(const std::string& filename)
     : filename_(filename),
       fd_(A2_BAD_FD),
 #ifdef __MINGW32__
-      mapView_(0),
+      mapView_(INVALID_HANDLE_VALUE),
 #else  // !__MINGW32__
 #endif // !__MINGW32__
       readOnly_(false),
       enableMmap_(false),
+      using_huge_pages_(false),
+      is_anonymous_mapping_(false),
+      huge_pages_size_(0),
       mapaddr_(nullptr),
       maplen_(0)
-
 {
 }
 
@@ -140,12 +143,19 @@ void AbstractDiskWriter::closeFile()
     CloseHandle(mapView_);
     mapView_ = INVALID_HANDLE_VALUE;
 #  else  // !__MINGW32__
-    if (munmap(mapaddr_, maplen_) == -1) {
-      errNum = errno;
+    if (using_huge_pages_ && is_anonymous_mapping_) {
+      // For anonymous huge pages, unmap the aligned huge page allocation
+      if (munmap(mapaddr_, huge_pages_size_) == -1) {
+        errNum = errno;
+      }
+    } else {
+      // Standard unmapping for regular file-backed pages
+      if (munmap(mapaddr_, maplen_) == -1) {
+        errNum = errno;
+      }
     }
 #  endif // !__MINGW32__
     if (errNum != 0) {
-      int errNum = fileError();
       A2_LOG_ERROR(fmt("Unmapping file %s failed: %s", filename_.c_str(),
                        fileStrerror(errNum).c_str()));
     }
@@ -259,6 +269,30 @@ ssize_t AbstractDiskWriter::writeDataInternal(const unsigned char* data,
 {
   if (mapaddr_) {
     std::copy_n(data, len, mapaddr_ + offset);
+    
+    // For anonymous huge page mappings, we need to write changes back to the file
+    if (is_anonymous_mapping_) {
+      seek(offset);
+      ssize_t writtenLength = 0;
+      while ((size_t)writtenLength < len) {
+#ifdef __MINGW32__
+        DWORD nwrite;
+        if (WriteFile(fd_, data + writtenLength, len - writtenLength, &nwrite, 0)) {
+          writtenLength += nwrite;
+        } else {
+          return -1;
+        }
+#else  // !__MINGW32__
+        ssize_t ret = 0;
+        while ((ret = write(fd_, data + writtenLength, len - writtenLength)) == -1 && errno == EINTR);
+        if (ret == -1) {
+          return -1;
+        }
+        writtenLength += ret;
+#endif // !__MINGW32__
+      }
+    }
+    
     return len;
   }
   else {
@@ -352,8 +386,16 @@ void AbstractDiskWriter::ensureMmapWrite(size_t len, int64_t offset)
         CloseHandle(mapView_);
         mapView_ = INVALID_HANDLE_VALUE;
 #  else  // !__MINGW32__
-        if (munmap(mapaddr_, maplen_) == -1) {
-          errNum = errno;
+        if (using_huge_pages_ && is_anonymous_mapping_) {
+          // For anonymous huge pages, unmap the aligned huge page allocation
+          if (munmap(mapaddr_, huge_pages_size_) == -1) {
+            errNum = errno;
+          }
+        } else {
+          // Standard unmapping for regular file-backed pages
+          if (munmap(mapaddr_, maplen_) == -1) {
+            errNum = errno;
+          }
         }
 #  endif // !__MINGW32__
         if (errNum != 0) {
@@ -401,14 +443,102 @@ void AbstractDiskWriter::ensureMmapWrite(size_t len, int64_t offset)
           errNum = GetLastError();
         }
 #  else  // !__MINGW32__
-        auto pa =
-            mmap(nullptr, filesize, PROT_READ | PROT_WRITE, MAP_SHARED, fd_, 0);
-
-        if (pa == MAP_FAILED) {
-          errNum = errno;
+        void* pa = MAP_FAILED;
+        bool using_huge_pages = false;
+        
+        // For large files, try to use huge pages with anonymous mapping + file I/O
+        // This is the correct approach since MAP_HUGETLB doesn't work with file-backed mappings
+        const size_t hugepage_size = 2 * 1024 * 1024; // 2MB huge pages
+        const size_t huge_page_threshold = 8 * 1024 * 1024; // 8MB threshold
+        
+        if (filesize >= huge_page_threshold) {
+          A2_LOG_DEBUG(fmt("Attempting huge page optimization for large file - File size: %" PRId64, filesize));
+          
+          // Try to allocate anonymous huge pages
+          size_t aligned_size = ((filesize + hugepage_size - 1) / hugepage_size) * hugepage_size;
+          
+          void* huge_mem = mmap(nullptr, aligned_size, PROT_READ | PROT_WRITE,
+                               MAP_PRIVATE | MAP_ANONYMOUS | MAP_HUGETLB, -1, 0);
+          
+          if (huge_mem != MAP_FAILED) {
+            A2_LOG_DEBUG(fmt("Successfully allocated %zu bytes of anonymous huge pages", aligned_size));
+            
+            // Read the file content into the huge page memory
+            if (lseek(fd_, 0, SEEK_SET) == 0) {
+              ssize_t bytes_read = 0;
+              char* buffer = static_cast<char*>(huge_mem);
+              
+              while (bytes_read < filesize) {
+                ssize_t chunk = read(fd_, buffer + bytes_read, 
+                                   std::min(static_cast<int64_t>(1024 * 1024), filesize - bytes_read));
+                if (chunk <= 0) {
+                  A2_LOG_WARN("Failed to read file content into huge pages, falling back to regular mmap");
+                  munmap(huge_mem, aligned_size);
+                  huge_mem = MAP_FAILED;
+                  break;
+                }
+                bytes_read += chunk;
+              }
+              
+              if (huge_mem != MAP_FAILED) {
+                pa = huge_mem;
+                using_huge_pages = true;
+                huge_pages_size_ = aligned_size;
+                A2_LOG_DEBUG(fmt("Successfully loaded file content into huge pages, size=%" PRId64, filesize));
+              }
+            } else {
+              A2_LOG_WARN("Failed to seek to beginning of file for huge page loading");
+              munmap(huge_mem, aligned_size);
+            }
+          } else {
+            int errnum = errno;
+            const char* error_detail;
+            switch (errnum) {
+              case ENOMEM:
+                error_detail = "No memory/huge pages available";
+                break;
+              case EPERM:
+                error_detail = "Permission denied for huge pages";
+                break;
+              case EINVAL:
+                error_detail = "Invalid argument for huge pages";
+                break;
+              default:
+                error_detail = util::safeStrerror(errnum).c_str();
+            }
+            A2_LOG_DEBUG(fmt("Anonymous huge page allocation failed: %s (%s). Using regular mmap.",
+                            error_detail, util::safeStrerror(errnum).c_str()));
+          }
         }
-        else {
+        
+        // Fallback to standard mmap if huge pages failed or file is small
+        if (pa == MAP_FAILED) {
+          A2_LOG_DEBUG(fmt("Using standard mmap for %s", filename_.c_str()));
+          pa = mmap(nullptr, filesize, PROT_READ | PROT_WRITE, MAP_SHARED, fd_, 0);
+          using_huge_pages = false;
+          
+          // Try to hint the kernel to use transparent huge pages for this mapping
+          if (pa != MAP_FAILED && filesize >= huge_page_threshold) {
+            if (madvise(pa, filesize, MADV_HUGEPAGE) == 0) {
+              A2_LOG_DEBUG("Successfully requested transparent huge pages for mapping");
+            }
+          }
+        }
+
+        if (pa != MAP_FAILED) {
           mapaddr_ = reinterpret_cast<unsigned char*>(pa);
+          maplen_ = filesize;
+          using_huge_pages_ = using_huge_pages;
+          is_anonymous_mapping_ = using_huge_pages; // Anonymous if using huge pages
+          A2_LOG_DEBUG(fmt("Memory mapping succeeded for %s, length=%" PRId64 ", huge_pages=%s",
+                          filename_.c_str(), static_cast<uint64_t>(filesize), 
+                          using_huge_pages ? "yes" : "no"));
+        } else {
+          errNum = errno;
+          mapaddr_ = nullptr;
+          A2_LOG_WARN(fmt("Memory mapping failed for %s: %s",
+                          filename_.c_str(), util::safeStrerror(errNum).c_str()));
+          enableMmap_ = false;
         }
 #  endif // !__MINGW32__
         if (mapaddr_) {
@@ -601,5 +731,7 @@ void AbstractDiskWriter::flushOSBuffers()
   fsync(fd_);
 #endif // __MINGW32__
 }
+
+
 
 } // namespace aria2

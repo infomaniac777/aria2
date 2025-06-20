@@ -55,6 +55,9 @@ private:
   bool readOnly_;
 
   bool enableMmap_;
+  bool using_huge_pages_;  // Track if we're using huge pages
+  bool is_anonymous_mapping_;  // Track if mapping is anonymous (for huge pages)
+  size_t huge_pages_size_;  // Size of huge page allocation for proper cleanup
   unsigned char* mapaddr_;
   int64_t maplen_;
 
