@@ -62,21 +62,7 @@ public:
   // implementation may create sparse file (with holes).
   virtual void allocate(int64_t offset, int64_t length, bool sparse) {}
 
-  // Legacy compatibility interface - 3 parameter writeData
-  virtual void writeData(const unsigned char* data, size_t length, int64_t fileOffset) {
-    auto buffer = buffer::copy(data, length);
-    writeData(buffer, 0, length, fileOffset);
-  }
 
-  // Legacy compatibility interface - 3 parameter readData  
-  virtual ssize_t readData(unsigned char* data, size_t length, int64_t fileOffset) {
-    auto buffer = buffer::create(length);
-    auto result = readData(buffer, 0, length, fileOffset);
-    if (result > 0) {
-      std::copy_n(buffer->data(), result, data);
-    }
-    return result;
-  }
 };
 
 } // namespace aria2

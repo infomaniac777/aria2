@@ -37,21 +37,9 @@
 
 namespace aria2 {
 
-// Default implementations of legacy interface methods
-// These are provided for backward compatibility and delegate to the buffer-based interface
-
-void BinaryStream::writeData(const unsigned char* data, size_t length, int64_t fileOffset) {
-  auto buffer = buffer::copy(data, length);
-  writeData(buffer, 0, length, fileOffset);
-}
-
-ssize_t BinaryStream::readData(unsigned char* data, size_t length, int64_t fileOffset) {
-  auto buffer = buffer::create(length);
-  auto result = readData(buffer, 0, length, fileOffset);
-  if (result > 0) {
-    std::copy_n(buffer->data(), result, data);
-  }
-  return result;
-}
+// BinaryStream now uses only the shared_ptr buffer interface
+// All implementations must provide the primary buffer-based methods:
+// - writeData(Buffer buffer, size_t bufferOffset, size_t length, int64_t fileOffset)
+// - readData(Buffer buffer, size_t bufferOffset, size_t length, int64_t fileOffset)
 
 } // namespace aria2 

@@ -1,5 +1,4 @@
 #include "MultiDiskAdaptor.h"
-#include "MultiDiskAdaptorTest.h"
 #include "Buffer.h"
 
 #include <string>
@@ -354,20 +353,30 @@ void MultiDiskAdaptorTest::testReadData()
   adaptor->setFileEntries(std::begin(entries), std::end(entries));
   adaptor->enableReadOnly();
   adaptor->openFile();
-  unsigned char buf[128];
-  adaptor->readData(buf, 15, 0);
-  buf[15] = '\0';
-  CPPUNIT_ASSERT_EQUAL(std::string("1234567890ABCDE"), std::string((char*)buf));
-  adaptor->readData(buf, 10, 6);
-  buf[10] = '\0';
-  CPPUNIT_ASSERT_EQUAL(std::string("7890ABCDEF"), std::string((char*)buf));
-  adaptor->readData(buf, 4, 20);
-  buf[4] = '\0';
-  CPPUNIT_ASSERT_EQUAL(std::string("KLMN"), std::string((char*)buf));
-  adaptor->readData(buf, 25, 0);
-  buf[25] = '\0';
+  
+  // Test reading 15 bytes from offset 0
+  auto buffer1 = buffer::create(128);
+  adaptor->readData(buffer1, 0, 15, 0);
+  CPPUNIT_ASSERT_EQUAL(std::string("1234567890ABCDE"), 
+                       std::string(buffer1->data(), buffer1->data() + 15));
+  
+  // Test reading 10 bytes from offset 6
+  auto buffer2 = buffer::create(128);
+  adaptor->readData(buffer2, 0, 10, 6);
+  CPPUNIT_ASSERT_EQUAL(std::string("7890ABCDEF"), 
+                       std::string(buffer2->data(), buffer2->data() + 10));
+  
+  // Test reading 4 bytes from offset 20
+  auto buffer3 = buffer::create(128);
+  adaptor->readData(buffer3, 0, 4, 20);
+  CPPUNIT_ASSERT_EQUAL(std::string("KLMN"), 
+                       std::string(buffer3->data(), buffer3->data() + 4));
+  
+  // Test reading 25 bytes from offset 0
+  auto buffer4 = buffer::create(128);
+  adaptor->readData(buffer4, 0, 25, 0);
   CPPUNIT_ASSERT_EQUAL(std::string("1234567890ABCDEFGHIJKLMNO"),
-                       std::string((char*)buf));
+                       std::string(buffer4->data(), buffer4->data() + 25));
 }
 
 void MultiDiskAdaptorTest::testCutTrailingGarbage()
