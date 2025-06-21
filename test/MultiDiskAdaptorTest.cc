@@ -1,8 +1,12 @@
 #include "MultiDiskAdaptor.h"
+#include "MultiDiskAdaptorTest.h"
+#include "Buffer.h"
 
 #include <string>
 #include <cerrno>
 #include <cstring>
+#include <algorithm>
+#include <memory>
 
 #include <cppunit/extensions/HelperMacros.h>
 
@@ -292,7 +296,9 @@ void MultiDiskAdaptorTest::testWriteData()
 
   adaptor->openFile();
   std::string msg = "12345";
-  adaptor->writeData((const unsigned char*)msg.c_str(), msg.size(), 0);
+  auto buffer = buffer::create(msg.size());
+  std::copy(msg.begin(), msg.end(), buffer->data());
+  adaptor->writeData(buffer, 0, msg.size(), 0);
   adaptor->closeFile();
 
   CPPUNIT_ASSERT(File(A2_TEST_OUT_DIR "/file0.txt").isFile());
@@ -303,7 +309,9 @@ void MultiDiskAdaptorTest::testWriteData()
 
   adaptor->openFile();
   std::string msg2 = "67890ABCDEF";
-  adaptor->writeData((const unsigned char*)msg2.c_str(), msg2.size(), 5);
+  auto buffer2 = buffer::create(msg2.size());
+  std::copy(msg2.begin(), msg2.end(), buffer2->data());
+  adaptor->writeData(buffer2, 0, msg2.size(), 5);
   adaptor->closeFile();
 
   readFile(A2_TEST_OUT_DIR "/file1.txt", buf, 15);
@@ -315,7 +323,9 @@ void MultiDiskAdaptorTest::testWriteData()
 
   adaptor->openFile();
   std::string msg3 = "12345123456712";
-  adaptor->writeData((const unsigned char*)msg3.c_str(), msg3.size(), 10);
+  auto buffer3 = buffer::create(msg3.size());
+  std::copy(msg3.begin(), msg3.end(), buffer3->data());
+  adaptor->writeData(buffer3, 0, msg3.size(), 10);
   adaptor->closeFile();
 
   readFile(A2_TEST_OUT_DIR "/file1.txt", buf, 15);

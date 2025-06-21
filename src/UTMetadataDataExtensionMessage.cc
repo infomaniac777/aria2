@@ -33,6 +33,7 @@
  */
 /* copyright --> */
 #include "UTMetadataDataExtensionMessage.h"
+#include <algorithm>
 #include "bencode2.h"
 #include "util.h"
 #include "a2functional.h"
@@ -49,6 +50,7 @@
 #include "LogFactory.h"
 #include "DlAbortEx.h"
 #include "fmt.h"
+#include "Buffer.h"
 
 namespace aria2 {
 
@@ -83,8 +85,10 @@ void UTMetadataDataExtensionMessage::doReceivedAction()
     A2_LOG_DEBUG(fmt("ut_metadata index=%lu found in tracking list",
                      static_cast<unsigned long>(getIndex())));
     tracker_->remove(getIndex());
+    auto buffer = buffer::create(data_.size());
+    std::copy(data_.begin(), data_.end(), buffer->data());
     pieceStorage_->getDiskAdaptor()->writeData(
-        reinterpret_cast<const unsigned char*>(data_.c_str()), data_.size(),
+        buffer, 0, data_.size(),
         getIndex() * METADATA_PIECE_SIZE);
     pieceStorage_->completePiece(pieceStorage_->getPiece(getIndex()));
     if (pieceStorage_->downloadFinished()) {

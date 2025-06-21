@@ -110,6 +110,10 @@ private:
   ssize_t readData(unsigned char* data, size_t len, int64_t offset,
                    bool dropCache);
 
+  void writeDataInternal(const unsigned char* data, size_t len, int64_t offset);
+  ssize_t readDataInternal(unsigned char* data, size_t len, int64_t offset);
+  void readDataInternalWithDropCache(size_t len, int64_t offset);
+
   static const int DEFAULT_MAX_OPEN_FILES = 100;
 
 public:
@@ -124,11 +128,15 @@ public:
 
   virtual void closeFile() CXX11_OVERRIDE;
 
-  virtual void writeData(const unsigned char* data, size_t len,
-                         int64_t offset) CXX11_OVERRIDE;
+  // Legacy interface - required by DiskAdaptor
+  
 
-  virtual ssize_t readData(unsigned char* data, size_t len,
-                           int64_t offset) CXX11_OVERRIDE;
+  // New buffer-based interface
+  virtual void writeData(Buffer buffer, size_t bufferOffset, size_t length,
+                        int64_t fileOffset) CXX11_OVERRIDE;
+
+  virtual ssize_t readData(Buffer buffer, size_t bufferOffset, size_t length,
+                          int64_t fileOffset) CXX11_OVERRIDE;
 
   virtual ssize_t readDataDropCache(unsigned char* data, size_t len,
                                     int64_t offset) CXX11_OVERRIDE;

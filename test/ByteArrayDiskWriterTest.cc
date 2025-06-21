@@ -1,65 +1,74 @@
 #include "ByteArrayDiskWriter.h"
 #include <string>
 #include <cppunit/extensions/HelperMacros.h>
+#include "buffer.h"
 
 namespace aria2 {
 
 class ByteArrayDiskWriterTest : public CppUnit::TestFixture {
 
   CPPUNIT_TEST_SUITE(ByteArrayDiskWriterTest);
-  CPPUNIT_TEST(testWriteAndRead);
-  CPPUNIT_TEST(testWriteAndRead2);
+  CPPUNIT_TEST(testWriteData);
+  CPPUNIT_TEST(testReadData);
   CPPUNIT_TEST_SUITE_END();
 
 private:
 public:
   void setUp() {}
 
-  void testWriteAndRead();
-  void testWriteAndRead2();
+  void testWriteData();
+  void testReadData();
 };
 
 CPPUNIT_TEST_SUITE_REGISTRATION(ByteArrayDiskWriterTest);
 
-void ByteArrayDiskWriterTest::testWriteAndRead()
+void ByteArrayDiskWriterTest::testWriteData()
 {
   ByteArrayDiskWriter bw;
-
-  std::string msg1 = "Hello";
-  bw.writeData((const unsigned char*)msg1.c_str(), msg1.size(), 0);
-  // write at the end of stream
-  std::string msg2 = " World";
-  bw.writeData((const unsigned char*)msg2.c_str(), msg2.size(), 5);
-  // write at the end of stream +1
-  std::string msg3 = "!!";
-  bw.writeData((const unsigned char*)msg3.c_str(), msg3.size(), 12);
-  // write space at the 'hole'
-  std::string msg4 = " ";
-  bw.writeData((const unsigned char*)msg4.c_str(), msg4.size(), 11);
-
-  char buf[100];
-  int32_t c = bw.readData((unsigned char*)buf, sizeof(buf), 1);
-  buf[c] = '\0';
-
-  CPPUNIT_ASSERT_EQUAL(std::string("ello World !!"), std::string(buf));
-  CPPUNIT_ASSERT_EQUAL((int64_t)14, bw.size());
+  std::string msg1 = "hello";
+  std::string msg2 = " world";
+  std::string msg3 = "!";
+  std::string msg4 = "H";
+  
+  auto buffer1 = buffer::create(msg1.size());
+  std::copy(msg1.begin(), msg1.end(), buffer1->data());
+  bw.writeData(buffer1, 0, msg1.size(), 0);
+  
+  auto buffer2 = buffer::create(msg2.size());
+  std::copy(msg2.begin(), msg2.end(), buffer2->data());
+  bw.writeData(buffer2, 0, msg2.size(), 5);
+  
+  auto buffer3 = buffer::create(msg3.size());
+  std::copy(msg3.begin(), msg3.end(), buffer3->data());
+  bw.writeData(buffer3, 0, msg3.size(), 12);
+  
+  auto buffer4 = buffer::create(msg4.size());
+  std::copy(msg4.begin(), msg4.end(), buffer4->data());
+  bw.writeData(buffer4, 0, msg4.size(), 11);
+  
+  CPPUNIT_ASSERT_EQUAL(std::string("hello world!"),
+                       std::string(bw.getBytes().begin(), bw.getBytes().end()));
 }
 
-void ByteArrayDiskWriterTest::testWriteAndRead2()
+void ByteArrayDiskWriterTest::testReadData()
 {
   ByteArrayDiskWriter bw;
-
-  std::string msg1 = "Hello World";
-  bw.writeData((const unsigned char*)msg1.c_str(), msg1.size(), 0);
-  std::string msg2 = "From Mars";
-  bw.writeData((const unsigned char*)msg2.c_str(), msg2.size(), 6);
-
-  char buf[100];
-  int32_t c = bw.readData((unsigned char*)buf, sizeof(buf), 0);
-  buf[c] = '\0';
-
-  CPPUNIT_ASSERT_EQUAL(std::string("Hello From Mars"), std::string(buf));
-  CPPUNIT_ASSERT_EQUAL((int64_t)15, bw.size());
+  std::string msg1 = "hello ";
+  std::string msg2 = "world";
+  
+  auto buffer1 = buffer::create(msg1.size());
+  std::copy(msg1.begin(), msg1.end(), buffer1->data());
+  bw.writeData(buffer1, 0, msg1.size(), 0);
+  
+  auto buffer2 = buffer::create(msg2.size());
+  std::copy(msg2.begin(), msg2.end(), buffer2->data());
+  bw.writeData(buffer2, 0, msg2.size(), 6);
+  
+  auto readBuffer = buffer::create(11);
+  ssize_t r = bw.readData(readBuffer, 0, 11, 0);
+  CPPUNIT_ASSERT_EQUAL((ssize_t)11, r);
+  CPPUNIT_ASSERT_EQUAL(std::string("hello world"),
+                       std::string(readBuffer->data(), readBuffer->data() + 11));
 }
 
 } // namespace aria2

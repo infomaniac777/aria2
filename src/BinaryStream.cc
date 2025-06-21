@@ -2,7 +2,7 @@
 /*
  * aria2 - The high speed download utility
  *
- * Copyright (C) 2012 Tatsuhiro Tsujikawa
+ * Copyright (C) 2006 Tatsuhiro Tsujikawa
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -32,48 +32,26 @@
  * files in the program, then also delete it here.
  */
 /* copyright --> */
-#include "XmlRpcDiskWriter.h"
-#include "DlAbortEx.h"
-#include "message.h"
-#include "ValueBase.h"
+#include "BinaryStream.h"
+#include <algorithm>
 
 namespace aria2 {
 
-namespace rpc {
+// Default implementations of legacy interface methods
+// These are provided for backward compatibility and delegate to the buffer-based interface
 
-XmlRpcDiskWriter::XmlRpcDiskWriter() : parser_(&psm_) {}
-
-XmlRpcDiskWriter::~XmlRpcDiskWriter() = default;
-
-void XmlRpcDiskWriter::initAndOpenFile(int64_t totalLength) { parser_.reset(); }
-
-
-
-// Buffer-based interface implementations
-void XmlRpcDiskWriter::writeData(Buffer buffer, size_t bufferOffset, size_t length,
-                                int64_t fileOffset)
-{
-  const unsigned char* data = buffer::cdata(buffer, bufferOffset);
-  // Return value is ignored here but handled in finalize()
-  parser_.parseUpdate(reinterpret_cast<const char*>(data), length);
+void BinaryStream::writeData(const unsigned char* data, size_t length, int64_t fileOffset) {
+  auto buffer = buffer::copy(data, length);
+  writeData(buffer, 0, length, fileOffset);
 }
 
-int XmlRpcDiskWriter::finalize() { return parser_.parseFinal(nullptr, 0); }
-
-RpcRequest XmlRpcDiskWriter::getResult()
-{
-  std::unique_ptr<List> params;
-  if (downcast<List>(psm_.getCurrentFrameValue())) {
-    params.reset(static_cast<List*>(psm_.popCurrentFrameValue().release()));
+ssize_t BinaryStream::readData(unsigned char* data, size_t length, int64_t fileOffset) {
+  auto buffer = buffer::create(length);
+  auto result = readData(buffer, 0, length, fileOffset);
+  if (result > 0) {
+    std::copy_n(buffer->data(), result, data);
   }
-  else {
-    params = List::g();
-  }
-  return RpcRequest{psm_.getMethodName(), std::move(params)};
+  return result;
 }
 
-int XmlRpcDiskWriter::reset() { return parser_.reset(); }
-
-} // namespace rpc
-
-} // namespace aria2
+} // namespace aria2 

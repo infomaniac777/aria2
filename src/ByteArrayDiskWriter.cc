@@ -54,12 +54,42 @@ void ByteArrayDiskWriter::openFile(int64_t totalLength) {}
 
 void ByteArrayDiskWriter::closeFile() {}
 
-void ByteArrayDiskWriter::openExistingFile(int64_t totalLength) { openFile(); }
-
-void ByteArrayDiskWriter::writeData(const unsigned char* data,
-                                    size_t dataLength, int64_t offset)
+void ByteArrayDiskWriter::openExistingFile(int64_t totalLength)
 {
-  if (offset + dataLength > maxLength_) {
+  return initAndOpenFile(totalLength);
+}
+
+
+
+// Buffer-based interface implementations
+void ByteArrayDiskWriter::writeData(Buffer buffer, size_t bufferOffset, size_t length,
+                                    int64_t fileOffset)
+{
+  // Bounds check
+  if (bufferOffset + length > buffer->size()) {
+    throw DL_ABORT_EX("Buffer bounds exceeded");
+  }
+  
+  const unsigned char* data = buffer->data() + bufferOffset;
+  writeDataInternal(data, length, fileOffset);
+}
+
+ssize_t ByteArrayDiskWriter::readData(Buffer buffer, size_t bufferOffset, size_t length,
+                                     int64_t fileOffset)
+{
+  // Bounds check
+  if (bufferOffset + length > buffer->size()) {
+    throw DL_ABORT_EX("Buffer bounds exceeded");
+  }
+  
+  unsigned char* data = buffer->data() + bufferOffset;
+  return readDataInternal(data, length, fileOffset);
+}
+
+void ByteArrayDiskWriter::writeDataInternal(const unsigned char* data, size_t len,
+                                           int64_t offset)
+{
+  if (offset + len > maxLength_) {
     throw DL_ABORT_EX(fmt("Maximum length(%lu) exceeded.",
                           static_cast<unsigned long>(maxLength_)));
   }
@@ -73,11 +103,11 @@ void ByteArrayDiskWriter::writeData(const unsigned char* data,
   else {
     buf_.seekp(offset, std::ios::beg);
   }
-  buf_.write(reinterpret_cast<const char*>(data), dataLength);
+  buf_.write(reinterpret_cast<const char*>(data), len);
 }
 
-ssize_t ByteArrayDiskWriter::readData(unsigned char* data, size_t len,
-                                      int64_t offset)
+ssize_t ByteArrayDiskWriter::readDataInternal(unsigned char* data, size_t len,
+                                              int64_t offset)
 {
   buf_.seekg(offset, std::ios::beg);
   buf_.read(reinterpret_cast<char*>(data), len);

@@ -46,30 +46,37 @@ class ByteArrayDiskWriter : public DiskWriter {
 private:
   std::stringstream buf_;
   size_t maxLength_;
-  void clear();
 
 public:
-  ByteArrayDiskWriter(size_t maxLength = 15_m);
+  ByteArrayDiskWriter(size_t maxLength = 16*1024);
   virtual ~ByteArrayDiskWriter();
 
-  virtual void initAndOpenFile(int64_t totalLength = 0) CXX11_OVERRIDE;
+  void clear();
 
-  virtual void openFile(int64_t totalLength = 0) CXX11_OVERRIDE;
+  virtual void initAndOpenFile(int64_t totalLength) CXX11_OVERRIDE;
+
+  virtual void openFile(int64_t totalLength) CXX11_OVERRIDE;
 
   virtual void closeFile() CXX11_OVERRIDE;
 
-  virtual void openExistingFile(int64_t totalLength = 0) CXX11_OVERRIDE;
+  virtual void openExistingFile(int64_t totalLength) CXX11_OVERRIDE;
 
-  virtual void writeData(const unsigned char* data, size_t len,
-                         int64_t offset) CXX11_OVERRIDE;
-  virtual ssize_t readData(unsigned char* data, size_t len,
-                           int64_t offset) CXX11_OVERRIDE;
+  // Buffer-based interface
+  virtual void writeData(Buffer buffer, size_t bufferOffset, size_t length,
+                        int64_t fileOffset) CXX11_OVERRIDE;
+
+  virtual ssize_t readData(Buffer buffer, size_t bufferOffset, size_t length,
+                          int64_t fileOffset) CXX11_OVERRIDE;
 
   virtual int64_t size() CXX11_OVERRIDE;
 
   void setString(const std::string& s);
 
   std::string getString() const;
+
+private:
+  void writeDataInternal(const unsigned char* data, size_t len, int64_t offset);
+  ssize_t readDataInternal(unsigned char* data, size_t len, int64_t offset);
 };
 
 } // namespace aria2

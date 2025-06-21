@@ -36,11 +36,13 @@
 
 #include <cstring>
 #include <cassert>
+#include <algorithm>
 
 #include "BinaryStream.h"
 #include "Segment.h"
 #include "WrDiskCache.h"
 #include "Piece.h"
+#include "Buffer.h"
 
 namespace aria2 {
 
@@ -86,7 +88,9 @@ ssize_t SinkStreamFilter::transform(const std::shared_ptr<BinaryStream>& out,
       }
     }
     else {
-      out->writeData(inbuf, wlen, segment->getPositionToWrite());
+      auto buffer = buffer::create(wlen);
+      std::copy_n(inbuf, wlen, buffer->data());
+      out->writeData(buffer, 0, wlen, segment->getPositionToWrite());
     }
     if (hashUpdate_) {
       segment->updateHash(segment->getWrittenLength(), inbuf, wlen);

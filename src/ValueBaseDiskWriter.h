@@ -69,15 +69,21 @@ public:
 
   virtual int64_t size() CXX11_OVERRIDE { return 0; }
 
-  virtual void writeData(const unsigned char* data, size_t len,
-                         int64_t offset) CXX11_OVERRIDE
+
+
+  // New buffer-based interface
+  virtual void writeData(Buffer buffer, size_t bufferOffset, size_t length,
+                        int64_t fileOffset) CXX11_OVERRIDE
   {
+    // Get data from buffer
+    const unsigned char* data = buffer::cdata(buffer, bufferOffset);
+    
     // Return value is ignored here but handled in finalize()
-    parser_.parseUpdate(reinterpret_cast<const char*>(data), len);
+    parser_.parseUpdate(reinterpret_cast<const char*>(data), length);
   }
 
-  virtual ssize_t readData(unsigned char* data, size_t len,
-                           int64_t offset) CXX11_OVERRIDE
+  virtual ssize_t readData(Buffer buffer, size_t bufferOffset, size_t length,
+                          int64_t fileOffset) CXX11_OVERRIDE
   {
     return 0;
   }

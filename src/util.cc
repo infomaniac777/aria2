@@ -1968,9 +1968,11 @@ std::string toString(const std::shared_ptr<BinaryStream>& binaryStream)
 {
   std::stringstream strm;
   char data[2048];
+  auto buffer = buffer::create(sizeof(data));
   while (1) {
     int32_t dataLength = binaryStream->readData(
-        reinterpret_cast<unsigned char*>(data), sizeof(data), strm.tellp());
+        buffer, 0, sizeof(data), strm.tellp());
+    std::copy_n(buffer->data(), dataLength, data);
     strm.write(data, dataLength);
     if (dataLength == 0) {
       break;

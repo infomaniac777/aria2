@@ -33,7 +33,9 @@
  */
 /* copyright --> */
 #include "AbstractSingleDiskAdaptor.h"
+#include <algorithm>
 #include "File.h"
+#include "Buffer.h"
 #include "AdaptiveFileAllocationIterator.h"
 #include "DiskWriter.h"
 #include "FileEntry.h"
@@ -70,25 +72,28 @@ void AbstractSingleDiskAdaptor::openExistingFile()
   diskWriter_->openExistingFile(totalLength_);
 }
 
-void AbstractSingleDiskAdaptor::writeData(const unsigned char* data, size_t len,
-                                          int64_t offset)
+// Buffer-based interface implementations
+void AbstractSingleDiskAdaptor::writeData(Buffer buffer, size_t bufferOffset, size_t length,
+                                          int64_t fileOffset)
 {
-  diskWriter_->writeData(data, len, offset);
+  diskWriter_->writeData(buffer, bufferOffset, length, fileOffset);
 }
 
-ssize_t AbstractSingleDiskAdaptor::readData(unsigned char* data, size_t len,
-                                            int64_t offset)
+ssize_t AbstractSingleDiskAdaptor::readData(Buffer buffer, size_t bufferOffset, size_t length,
+                                            int64_t fileOffset)
 {
-  return diskWriter_->readData(data, len, offset);
+  return diskWriter_->readData(buffer, bufferOffset, length, fileOffset);
 }
 
 ssize_t AbstractSingleDiskAdaptor::readDataDropCache(unsigned char* data,
                                                      size_t len, int64_t offset)
 {
-  auto rv = readData(data, len, offset);
+  auto buffer = buffer::create(len);
+  auto rv = readData(buffer, 0, len, offset);
 
   if (rv > 0) {
-    diskWriter_->dropCache(len, offset);
+    std::copy_n(buffer->data(), rv, data);
+    diskWriter_->dropCache(rv, offset);
   }
 
   return rv;
@@ -99,7 +104,9 @@ void AbstractSingleDiskAdaptor::writeCache(const WrDiskCacheEntry* entry)
   for (auto& d : entry->getDataSet()) {
     A2_LOG_DEBUG(fmt("Cache flush goff=%" PRId64 ", len=%lu", d->goff,
                      static_cast<unsigned long>(d->len)));
-    writeData(d->data + d->offset, d->len, d->goff);
+    auto buffer = buffer::create(d->len);
+    std::copy_n(d->data + d->offset, d->len, buffer->data());
+    writeData(buffer, 0, d->len, d->goff);
   }
 }
 

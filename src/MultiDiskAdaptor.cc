@@ -37,6 +37,7 @@
 #include <cassert>
 #include <algorithm>
 #include <map>
+#include <cstring>
 
 #include "DefaultDiskWriter.h"
 #include "message.h"
@@ -334,80 +335,60 @@ void throwOnDiskWriterNotOpened(DiskWriterEntry* e, int64_t offset)
 }
 } // namespace
 
-void MultiDiskAdaptor::writeData(const unsigned char* data, size_t len,
-                                 int64_t offset)
-{
-  auto first = findFirstDiskWriterEntry(diskWriterEntries_, offset);
-  ssize_t rem = len;
-  int64_t fileOffset = offset - (*first)->getFileEntry()->getOffset();
-  for (auto i = first, eoi = diskWriterEntries_.cend(); i != eoi; ++i) {
-    ssize_t writeLength = calculateLength((*i).get(), fileOffset, rem);
-    openIfNot((*i).get(), &DiskWriterEntry::openFile);
-    if (!(*i)->isOpen()) {
-      throwOnDiskWriterNotOpened((*i).get(), offset + (len - rem));
-    }
 
-    (*i)->getDiskWriter()->writeData(data + (len - rem), writeLength,
-                                     fileOffset);
-    rem -= writeLength;
-    fileOffset = 0;
-    if (rem == 0) {
-      break;
-    }
-  }
+
+// Buffer-based interface implementations
+void MultiDiskAdaptor::writeData(Buffer buffer, size_t bufferOffset, size_t length,
+                                 int64_t fileOffset)
+{
+  // Get data from buffer
+  const unsigned char* data = buffer::cdata(buffer, bufferOffset);
+  
+  // Use internal helper method
+  writeDataInternal(data, length, fileOffset);
 }
 
-ssize_t MultiDiskAdaptor::readData(unsigned char* data, size_t len,
-                                   int64_t offset)
+ssize_t MultiDiskAdaptor::readData(Buffer buffer, size_t bufferOffset, size_t length,
+                                   int64_t fileOffset)
 {
-  return readData(data, len, offset, false);
+  // Get writable location in buffer
+  unsigned char* data = buffer::data(buffer, bufferOffset);
+  
+  // Use internal helper method
+  return readDataInternal(data, length, fileOffset);
 }
 
 ssize_t MultiDiskAdaptor::readDataDropCache(unsigned char* data, size_t len,
                                             int64_t offset)
 {
-  return readData(data, len, offset, true);
+  auto buffer = buffer::create(len);
+  auto rv = readData(buffer, 0, len, offset);
+  
+  if (rv > 0) {
+    std::copy_n(buffer->data(), rv, data);
+    // Apply drop cache to the data we actually read
+    readDataInternalWithDropCache(rv, offset);
+  }
+  
+  return rv;
 }
 
-ssize_t MultiDiskAdaptor::readData(unsigned char* data, size_t len,
-                                   int64_t offset, bool dropCache)
+void MultiDiskAdaptor::readDataInternalWithDropCache(size_t len, int64_t offset)
 {
   auto first = findFirstDiskWriterEntry(diskWriterEntries_, offset);
   ssize_t rem = len;
-  ssize_t totalReadLength = 0;
   int64_t fileOffset = offset - (*first)->getFileEntry()->getOffset();
   for (auto i = first, eoi = diskWriterEntries_.cend(); i != eoi; ++i) {
-    ssize_t readLength = calculateLength((*i).get(), fileOffset, rem);
-    openIfNot((*i).get(), &DiskWriterEntry::openFile);
-    if (!(*i)->isOpen()) {
-      throwOnDiskWriterNotOpened((*i).get(), offset + (len - rem));
+    ssize_t cacheLength = calculateLength((*i).get(), fileOffset, rem);
+    if ((*i)->isOpen()) {
+      (*i)->getDiskWriter()->dropCache(cacheLength, fileOffset);
     }
-
-    while (readLength > 0) {
-      auto nread = (*i)->getDiskWriter()->readData(data + (len - rem),
-                                                   readLength, fileOffset);
-
-      if (nread == 0) {
-        return totalReadLength;
-      }
-
-      totalReadLength += nread;
-
-      if (dropCache) {
-        (*i)->getDiskWriter()->dropCache(nread, fileOffset);
-      }
-
-      readLength -= nread;
-      rem -= nread;
-      fileOffset += nread;
-    }
-
+    rem -= cacheLength;
     fileOffset = 0;
     if (rem == 0) {
       break;
     }
   }
-  return totalReadLength;
 }
 
 void MultiDiskAdaptor::writeCache(const WrDiskCacheEntry* entry)
@@ -415,7 +396,9 @@ void MultiDiskAdaptor::writeCache(const WrDiskCacheEntry* entry)
   for (auto& d : entry->getDataSet()) {
     A2_LOG_DEBUG(fmt("Cache flush goff=%" PRId64 ", len=%lu", d->goff,
                      static_cast<unsigned long>(d->len)));
-    writeData(d->data + d->offset, d->len, d->goff);
+    auto buffer = buffer::create(d->len);
+    std::copy_n(d->data + d->offset, d->len, buffer->data());
+    writeData(buffer, 0, d->len, d->goff);
   }
 }
 
@@ -490,6 +473,87 @@ size_t MultiDiskAdaptor::utime(const Time& actime, const Time& modtime)
     }
   }
   return numOK;
+}
+
+void MultiDiskAdaptor::writeDataInternal(const unsigned char* data, size_t len,
+                                        int64_t offset)
+{
+  // Create a single buffer once from the input data
+  auto inputBuffer = buffer::copy(data, len);
+  
+  auto first = findFirstDiskWriterEntry(diskWriterEntries_, offset);
+  ssize_t rem = len;
+  size_t bufferOffset = 0;
+  int64_t fileOffset = offset - (*first)->getFileEntry()->getOffset();
+  
+  for (auto i = first, eoi = diskWriterEntries_.cend(); i != eoi; ++i) {
+    ssize_t writeLength = calculateLength((*i).get(), fileOffset, rem);
+    openIfNot((*i).get(), &DiskWriterEntry::openFile);
+    if (!(*i)->isOpen()) {
+      throwOnDiskWriterNotOpened((*i).get(), offset + (len - rem));
+    }
+
+    (*i)->getDiskWriter()->writeData(inputBuffer, bufferOffset, writeLength, fileOffset);
+    
+    bufferOffset += writeLength;
+    rem -= writeLength;
+    fileOffset = 0;
+    if (rem == 0) {
+      break;
+    }
+  }
+}
+
+ssize_t MultiDiskAdaptor::readDataInternal(unsigned char* data, size_t len,
+                                           int64_t offset)
+{
+  // Create a single output buffer
+  auto outputBuffer = buffer::create(len);
+  
+  auto first = findFirstDiskWriterEntry(diskWriterEntries_, offset);
+  ssize_t rem = len;
+  ssize_t totalReadLength = 0;
+  size_t bufferOffset = 0;
+  int64_t fileOffset = offset - (*first)->getFileEntry()->getOffset();
+  
+  for (auto i = first, eoi = diskWriterEntries_.cend(); i != eoi; ++i) {
+    ssize_t readLength = calculateLength((*i).get(), fileOffset, rem);
+    openIfNot((*i).get(), &DiskWriterEntry::openFile);
+    if (!(*i)->isOpen()) {
+      throwOnDiskWriterNotOpened((*i).get(), offset + (len - rem));
+    }
+
+    while (readLength > 0) {
+      auto nread = (*i)->getDiskWriter()->readData(outputBuffer, bufferOffset, readLength, fileOffset);
+
+      if (nread == 0) {
+        // Copy what we have read so far to the output
+        if (totalReadLength > 0) {
+          std::copy_n(outputBuffer->data(), totalReadLength, data);
+        }
+        return totalReadLength;
+      }
+
+      totalReadLength += nread;
+      bufferOffset += nread;
+
+      readLength -= nread;
+      rem -= nread;
+      fileOffset += nread;
+    }
+
+    fileOffset = 0;
+    if (rem == 0) {
+      break;
+    }
+  }
+  
+  // Copy the complete buffer to output
+  if (totalReadLength > 0) {
+    std::copy_n(outputBuffer->data(), totalReadLength, data);
+  }
+  
+  return totalReadLength;
 }
 
 } // namespace aria2

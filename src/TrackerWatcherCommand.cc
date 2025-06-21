@@ -67,6 +67,7 @@
 #include "UDPTrackerClient.h"
 #include "BtRegistry.h"
 #include "NameResolveCommand.h"
+#include "Buffer.h"
 
 namespace aria2 {
 
@@ -108,14 +109,15 @@ bool HTTPAnnRequest::processResponse(
   try {
     std::stringstream strm;
     unsigned char data[2048];
+    auto buffer = buffer::create(sizeof(data));
     rg_->getPieceStorage()->getDiskAdaptor()->openFile();
     while (1) {
       ssize_t dataLength = rg_->getPieceStorage()->getDiskAdaptor()->readData(
-          data, sizeof(data), strm.tellp());
+          buffer, 0, sizeof(data), strm.tellp());
       if (dataLength == 0) {
         break;
       }
-      strm.write(reinterpret_cast<const char*>(data), dataLength);
+      strm.write(reinterpret_cast<const char*>(buffer->data()), dataLength);
     }
     std::string res = strm.str();
     btAnnounce->processAnnounceResponse(

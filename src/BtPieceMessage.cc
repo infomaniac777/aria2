@@ -37,6 +37,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <cassert>
+#include <algorithm>
 
 #include "bittorrent_helper.h"
 #include "util.h"
@@ -61,6 +62,7 @@
 #include "WrDiskCacheEntry.h"
 #include "DownloadFailureException.h"
 #include "BtRejectMessage.h"
+#include "Buffer.h"
 
 namespace aria2 {
 
@@ -124,7 +126,9 @@ void BtPieceMessage::doReceivedAction()
                            blockLength_, blockLength_, offset);
     }
     else {
-      getPieceStorage()->getDiskAdaptor()->writeData(data_ + 9, blockLength_,
+      auto buffer = buffer::create(blockLength_);
+      std::copy_n(data_ + 9, blockLength_, buffer->data());
+      getPieceStorage()->getDiskAdaptor()->writeData(buffer, 0, blockLength_,
                                                      offset);
     }
     piece->completeBlock(slot->getBlockIndex());
@@ -218,9 +222,11 @@ void BtPieceMessage::pushPieceData(int64_t offset, int32_t length) const
   auto buf = std::vector<unsigned char>(length + MESSAGE_HEADER_LENGTH);
   createMessageHeader(buf.data());
   ssize_t r;
+  auto buffer = buffer::create(length);
   r = getPieceStorage()->getDiskAdaptor()->readData(
-      buf.data() + MESSAGE_HEADER_LENGTH, length, offset);
+      buffer, 0, length, offset);
   if (r == length) {
+    std::copy_n(buffer->data(), length, buf.data() + MESSAGE_HEADER_LENGTH);
     const auto& peer = getPeer();
     getPeerConnection()->pushBytes(
         std::move(buf), make_unique<PieceSendUpdate>(downloadContext_, peer,

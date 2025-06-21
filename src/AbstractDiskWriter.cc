@@ -73,10 +73,8 @@ AbstractDiskWriter::AbstractDiskWriter(const std::string& filename)
 
 AbstractDiskWriter::~AbstractDiskWriter() { closeFile(); }
 
-namespace {
-// Returns error code depending on the platform. For MinGW32, return
-// the value of GetLastError(). Otherwise, return errno.
-int fileError()
+// Member function implementation
+int AbstractDiskWriter::fileError()
 {
 #ifdef __MINGW32__
   return GetLastError();
@@ -84,7 +82,6 @@ int fileError()
   return errno;
 #endif // !__MINGW32__
 }
-} // namespace
 
 namespace {
 // Formats error message for error code errNum. For MinGW32, errNum is
@@ -254,20 +251,23 @@ void AbstractDiskWriter::createFile(int addFlags)
                           error_code::FILE_CREATE_ERROR);
 }
 
-ssize_t AbstractDiskWriter::writeDataInternal(const unsigned char* data,
-                                              size_t len, int64_t offset)
+ssize_t AbstractDiskWriter::writeDataInternal(Buffer buffer, size_t bufferOffset, 
+                                              size_t length, int64_t fileOffset)
 {
+  // Get pointer to the data within the buffer
+  const unsigned char* data = buffer::cdata(buffer, bufferOffset);
+  
   if (mapaddr_) {
-    std::copy_n(data, len, mapaddr_ + offset);
-    return len;
+    std::copy_n(data, length, mapaddr_ + fileOffset);
+    return length;
   }
   else {
     ssize_t writtenLength = 0;
-    seek(offset);
-    while ((size_t)writtenLength < len) {
+    seek(fileOffset);
+    while ((size_t)writtenLength < length) {
 #ifdef __MINGW32__
       DWORD nwrite;
-      if (WriteFile(fd_, data + writtenLength, len - writtenLength, &nwrite,
+      if (WriteFile(fd_, data + writtenLength, length - writtenLength, &nwrite,
                     0)) {
         writtenLength += nwrite;
       }
@@ -276,7 +276,7 @@ ssize_t AbstractDiskWriter::writeDataInternal(const unsigned char* data,
       }
 #else  // !__MINGW32__
       ssize_t ret = 0;
-      while ((ret = write(fd_, data + writtenLength, len - writtenLength)) ==
+      while ((ret = write(fd_, data + writtenLength, length - writtenLength)) ==
                  -1 &&
              errno == EINTR)
         ;
@@ -290,22 +290,25 @@ ssize_t AbstractDiskWriter::writeDataInternal(const unsigned char* data,
   }
 }
 
-ssize_t AbstractDiskWriter::readDataInternal(unsigned char* data, size_t len,
-                                             int64_t offset)
+ssize_t AbstractDiskWriter::readDataInternal(Buffer buffer, size_t bufferOffset,
+                                             size_t length, int64_t fileOffset)
 {
+  // Get pointer to the buffer location where data should be written
+  unsigned char* data = buffer::data(buffer, bufferOffset);
+  
   if (mapaddr_) {
-    if (offset >= maplen_) {
+    if (fileOffset >= maplen_) {
       return 0;
     }
-    auto readlen = std::min(maplen_ - offset, static_cast<int64_t>(len));
-    std::copy_n(mapaddr_ + offset, readlen, data);
+    auto readlen = std::min(maplen_ - fileOffset, static_cast<int64_t>(length));
+    std::copy_n(mapaddr_ + fileOffset, readlen, data);
     return readlen;
   }
   else {
-    seek(offset);
+    seek(fileOffset);
 #ifdef __MINGW32__
     DWORD nread;
-    if (ReadFile(fd_, data, len, &nread, 0)) {
+    if (ReadFile(fd_, data, length, &nread, 0)) {
       return nread;
     }
     else {
@@ -313,7 +316,7 @@ ssize_t AbstractDiskWriter::readDataInternal(unsigned char* data, size_t len,
     }
 #else  // !__MINGW32__
     ssize_t ret = 0;
-    while ((ret = read(fd_, data, len)) == -1 && errno == EINTR)
+    while ((ret = read(fd_, data, length)) == -1 && errno == EINTR)
       ;
     return ret;
 #endif // !__MINGW32__
@@ -441,11 +444,12 @@ bool isDiskFullError(int errNum)
 }
 } // namespace
 
-void AbstractDiskWriter::writeData(const unsigned char* data, size_t len,
-                                   int64_t offset)
+// Buffer-based interface implementations
+void AbstractDiskWriter::writeData(Buffer buffer, size_t bufferOffset, size_t length,
+                                  int64_t fileOffset)
 {
-  ensureMmapWrite(len, offset);
-  if (writeDataInternal(data, len, offset) < 0) {
+  ensureMmapWrite(length, fileOffset);
+  if (writeDataInternal(buffer, bufferOffset, length, fileOffset) < 0) {
     int errNum = fileError();
     // If the error indicates disk full situation, throw
     // DownloadFailureException and abort download instantly.
@@ -464,11 +468,11 @@ void AbstractDiskWriter::writeData(const unsigned char* data, size_t len,
   }
 }
 
-ssize_t AbstractDiskWriter::readData(unsigned char* data, size_t len,
-                                     int64_t offset)
+ssize_t AbstractDiskWriter::readData(Buffer buffer, size_t bufferOffset, size_t length,
+                                    int64_t fileOffset)
 {
   ssize_t ret;
-  if ((ret = readDataInternal(data, len, offset)) < 0) {
+  if ((ret = readDataInternal(buffer, bufferOffset, length, fileOffset)) < 0) {
     int errNum = fileError();
     throw DL_ABORT_EX3(
         errNum,

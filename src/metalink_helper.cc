@@ -46,6 +46,7 @@
 #include "BinaryStream.h"
 #include "MetalinkMetaurl.h"
 #include "a2functional.h"
+#include "Buffer.h"
 
 namespace aria2 {
 
@@ -130,11 +131,12 @@ std::unique_ptr<Metalinker> parseBinaryStream(BinaryStream* bs,
   psm.setBaseUri(baseUri);
   xml::XmlParser ps(&psm);
   std::array<unsigned char, 4_k> buf;
+  auto buffer = buffer::create(buf.size());
   ssize_t nread;
   int64_t offread = 0;
   bool retval = true;
-  while ((nread = bs->readData(buf.data(), buf.size(), offread)) > 0) {
-    if (ps.parseUpdate(reinterpret_cast<const char*>(buf.data()), nread) < 0) {
+  while ((nread = bs->readData(buffer, 0, buf.size(), offread)) > 0) {
+    if (ps.parseUpdate(reinterpret_cast<const char*>(buffer->data()), nread) < 0) {
       retval = false;
       break;
     }

@@ -4,6 +4,7 @@
 #include <cstring>
 #include <string>
 #include <iostream>
+#include <algorithm>
 
 #include <cppunit/extensions/HelperMacros.h>
 
@@ -17,6 +18,8 @@
 #include "BufferedFile.h"
 #include "TestUtil.h"
 #include "SocketCore.h"
+#include "UtilTest2.h"
+#include "Buffer.h"
 
 namespace aria2 {
 
@@ -477,7 +480,9 @@ void UtilTest2::testToString_binaryStream()
   std::shared_ptr<DiskWriter> dw(new ByteArrayDiskWriter());
   std::string data(16_k + 256, 'a');
   dw->initAndOpenFile();
-  dw->writeData((const unsigned char*)data.c_str(), data.size(), 0);
+  auto buffer = buffer::create(data.size());
+  std::copy(data.begin(), data.end(), buffer->data());
+  dw->writeData(buffer, 0, data.size(), 0);
 
   std::string readData = util::toString(dw);
 

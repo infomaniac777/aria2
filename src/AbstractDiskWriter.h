@@ -36,6 +36,7 @@
 #define D_ABSTRACT_DISK_WRITER_H
 
 #include "DiskWriter.h"
+#include "Buffer.h"
 #include <string>
 
 namespace aria2 {
@@ -58,9 +59,11 @@ private:
   unsigned char* mapaddr_;
   int64_t maplen_;
 
-  ssize_t writeDataInternal(const unsigned char* data, size_t len,
-                            int64_t offset);
-  ssize_t readDataInternal(unsigned char* data, size_t len, int64_t offset);
+  // Internal implementation methods using shared buffers
+  ssize_t writeDataInternal(Buffer buffer, size_t bufferOffset, size_t length,
+                           int64_t fileOffset);
+  ssize_t readDataInternal(Buffer buffer, size_t bufferOffset, size_t length,
+                          int64_t fileOffset);
 
   void seek(int64_t offset);
 
@@ -79,11 +82,14 @@ public:
 
   virtual void openExistingFile(int64_t totalLength = 0) CXX11_OVERRIDE;
 
-  virtual void writeData(const unsigned char* data, size_t len,
-                         int64_t offset) CXX11_OVERRIDE;
 
-  virtual ssize_t readData(unsigned char* data, size_t len,
-                           int64_t offset) CXX11_OVERRIDE;
+
+  // New buffer-based interface
+  virtual void writeData(Buffer buffer, size_t bufferOffset, size_t length,
+                        int64_t fileOffset) CXX11_OVERRIDE;
+
+  virtual ssize_t readData(Buffer buffer, size_t bufferOffset, size_t length,
+                          int64_t fileOffset) CXX11_OVERRIDE;
 
   virtual void truncate(int64_t length) CXX11_OVERRIDE;
 
@@ -102,6 +108,10 @@ public:
   virtual void dropCache(int64_t len, int64_t offset) CXX11_OVERRIDE;
 
   virtual void flushOSBuffers() CXX11_OVERRIDE;
+
+
+
+  int fileError();
 };
 
 } // namespace aria2

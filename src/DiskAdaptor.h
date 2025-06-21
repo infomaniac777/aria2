@@ -36,6 +36,7 @@
 #define D_DISK_ADAPTOR_H
 
 #include "BinaryStream.h"
+#include "Buffer.h"
 
 #include <string>
 #include <vector>
@@ -68,6 +69,13 @@ public:
   virtual void openExistingFile() = 0;
 
   virtual void initAndOpenFile() = 0;
+
+  // Buffer-based interface - derived classes must implement
+  virtual void writeData(Buffer buffer, size_t bufferOffset, size_t length,
+                        int64_t fileOffset) = 0;
+
+  virtual ssize_t readData(Buffer buffer, size_t bufferOffset, size_t length,
+                          int64_t fileOffset) = 0;
 
   virtual bool fileExists() = 0;
 

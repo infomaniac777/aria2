@@ -35,6 +35,8 @@
 #include "HttpServer.h"
 
 #include <sstream>
+#include <algorithm>
+#include <cstring>
 
 #include "HttpHeader.h"
 #include "SocketCore.h"
@@ -241,7 +243,9 @@ bool HttpServer::receiveBody()
       std::min(socketRecvBuffer_->getBufferLength(),
                static_cast<size_t>(lastContentLength_ - bodyConsumed_));
   if (lastBody_) {
-    lastBody_->writeData(socketRecvBuffer_->getBuffer(), length, 0);
+    auto buffer = buffer::create(length);
+    std::copy_n(socketRecvBuffer_->getBuffer(), length, buffer->data());
+    lastBody_->writeData(buffer, 0, length, 0);
   }
   socketRecvBuffer_->drain(length);
   bodyConsumed_ += length;

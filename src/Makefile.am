@@ -33,6 +33,7 @@ SRCS =  \
 	bitfield.cc bitfield.h\
 	BitfieldMan.cc BitfieldMan.h\
 	BtProgressInfoFile.h\
+	Buffer.h\
 	BufferedFile.cc BufferedFile.h\
 	ByteArrayDiskWriter.cc ByteArrayDiskWriter.h\
 	ByteArrayDiskWriterFactory.h\

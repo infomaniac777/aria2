@@ -48,6 +48,7 @@
 #include "fmt.h"
 #include "DiskAdaptor.h"
 #include "MessageDigest.h"
+#include "Buffer.h"
 
 namespace aria2 {
 
@@ -231,21 +232,22 @@ void updateHashWithRead(MessageDigest* mdctx,
                         int64_t offset, size_t len)
 {
   std::array<unsigned char, 4_k> buf;
+  auto buffer = buffer::create(buf.size());
   ldiv_t res = ldiv(len, buf.size());
   for (int j = 0; j < res.quot; ++j) {
-    ssize_t nread = adaptor->readData(buf.data(), buf.size(), offset);
+    ssize_t nread = adaptor->readData(buffer, 0, buf.size(), offset);
     if ((size_t)nread != buf.size()) {
       throw DL_ABORT_EX(fmt(EX_FILE_READ, "n/a", "data is too short"));
     }
-    mdctx->update(buf.data(), nread);
+    mdctx->update(buffer->data(), nread);
     offset += nread;
   }
   if (res.rem) {
-    ssize_t nread = adaptor->readData(buf.data(), res.rem, offset);
+    ssize_t nread = adaptor->readData(buffer, 0, res.rem, offset);
     if (nread != res.rem) {
       throw DL_ABORT_EX(fmt(EX_FILE_READ, "n/a", "data is too short"));
     }
-    mdctx->update(buf.data(), nread);
+    mdctx->update(buffer->data(), nread);
   }
 }
 } // namespace

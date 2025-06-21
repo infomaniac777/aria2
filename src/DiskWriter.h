@@ -36,6 +36,7 @@
 #define D_DISK_WRITER_H
 
 #include "BinaryStream.h"
+#include "Buffer.h"
 
 namespace aria2 {
 

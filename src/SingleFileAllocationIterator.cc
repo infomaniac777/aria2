@@ -38,6 +38,7 @@
 #include <cstdlib>
 
 #include "BinaryStream.h"
+#include "Buffer.h"
 #include "util.h"
 #include "a2io.h"
 #include "Logger.h"
@@ -87,7 +88,9 @@ void SingleFileAllocationIterator::init()
 
 void SingleFileAllocationIterator::allocateChunk()
 {
-  stream_->writeData(buffer_, BUFSIZE, offset_);
+  // Create buffer from raw data for the new interface
+  auto buffer = buffer::copy(buffer_, BUFSIZE);
+  stream_->writeData(buffer, 0, BUFSIZE, offset_);
   offset_ += BUFSIZE;
 
   if (totalLength_ < offset_) {
