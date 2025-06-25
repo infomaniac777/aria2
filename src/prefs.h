@@ -98,6 +98,7 @@ extern const std::string V_KQUEUE;
 extern const std::string V_PORT;
 extern const std::string V_POLL;
 extern const std::string V_SELECT;
+extern const std::string V_IOURING;
 extern const std::string V_BINARY;
 extern const std::string V_ASCII;
 extern const std::string V_GET;

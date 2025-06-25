@@ -73,6 +73,7 @@ ARIA2_ARG_DISABLE([bittorrent])
 ARIA2_ARG_DISABLE([metalink])
 ARIA2_ARG_DISABLE([websocket])
 ARIA2_ARG_DISABLE([epoll])
+ARIA2_ARG_DISABLE([liburing])
 ARIA2_ARG_ENABLE([libaria2])
 ARIA2_ARG_ENABLE([werror])
 
@@ -849,6 +850,17 @@ if test "x$enable_epoll" = "xyes"; then
 fi
 AM_CONDITIONAL([HAVE_EPOLL], [test "x$have_epoll" = "xyes"])
 
+have_liburing=no
+if test "x$enable_liburing" = "xyes"; then
+  AC_CHECK_LIB([uring], [io_uring_queue_init], [have_liburing=yes])
+  if test "x$have_liburing" = "xyes"; then
+    AC_DEFINE([HAVE_LIBURING], [1], [Define to 1 if liburing is available.])
+    LIBURING_LIBS="-luring"
+    AC_SUBST([LIBURING_LIBS])
+  fi
+fi
+AM_CONDITIONAL([HAVE_LIBURING], [test "x$have_liburing" = "xyes"])
+
 AC_CHECK_FUNCS([posix_fallocate],[have_posix_fallocate=yes])
 ARIA2_CHECK_FALLOCATE
 if test "x$have_posix_fallocate" = "xyes" ||
@@ -1108,6 +1120,7 @@ Libssh2:        $have_libssh2 (CFLAGS='$LIBSSH2_CFLAGS' LIBS='$LIBSSH2_LIBS')
 Tcmalloc:       $have_tcmalloc (CFLAGS='$TCMALLOC_CFLAGS' LIBS='$TCMALLOC_LIBS')
 Jemalloc:       $have_jemalloc (CFLAGS='$JEMALLOC_CFLAGS' LIBS='$JEMALLOC_LIBS')
 Epoll:          $have_epoll
+LibUring:       $have_liburing (LIBS='$LIBURING_LIBS')
 Bittorrent:     $enable_bittorrent
 Metalink:       $enable_metalink
 XML-RPC:        $enable_xml_rpc

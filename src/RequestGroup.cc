@@ -116,6 +116,10 @@
 #ifdef ENABLE_METALINK
 #  include "MetalinkPostDownloadHandler.h"
 #endif // ENABLE_METALINK
+#ifdef HAVE_LIBURING
+#  include "IoUringDiskWriterFactory.h"
+#  include "IoUringEventPoll.h"
+#endif // HAVE_LIBURING
 
 namespace aria2 {
 
@@ -276,6 +280,18 @@ void RequestGroup::createInitialCommand(
   // file allocation takes a time.  For downloads in which file size
   // is unknown, session timer will not be reset.
   downloadContext_->resetDownloadStartTime();
+
+  // Set up io_uring disk writer factory if io_uring is enabled
+#ifdef HAVE_LIBURING
+  if (e->getOption()->get(PREF_EVENT_POLL) == V_IOURING) {
+    auto ioUringEventPoll = dynamic_cast<IoUringEventPoll*>(e->getEventPoll());
+    if (ioUringEventPoll) {
+      setDiskWriterFactory(std::make_shared<IoUringDiskWriterFactory>(ioUringEventPoll));
+      A2_LOG_DEBUG("Using IoUringDiskWriterFactory for disk I/O");
+    }
+  }
+#endif // HAVE_LIBURING
+
 #ifdef ENABLE_BITTORRENT
   if (downloadContext_->hasAttribute(CTX_ATTR_BT)) {
     auto torrentAttrs = bittorrent::getTorrentAttrs(downloadContext_);

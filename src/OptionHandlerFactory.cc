@@ -283,7 +283,9 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
   {
     OptionHandler* op(new ParameterOptionHandler(PREF_EVENT_POLL,
                                                  TEXT_EVENT_POLL,
-#if defined(HAVE_EPOLL)
+#if defined(HAVE_LIBURING)
+                                                 V_IOURING,
+#elif defined(HAVE_EPOLL)
                                                  V_EPOLL,
 #elif defined(HAVE_KQUEUE)
                                                  V_KQUEUE,
@@ -297,6 +299,9 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
                                                  V_SELECT,
 #endif // defined(HAVE_EPOLL)
                                                  {
+#ifdef HAVE_LIBURING
+                                                     V_IOURING,
+#endif // HAVE_LIBURING
 #ifdef HAVE_EPOLL
                                                      V_EPOLL,
 #endif // HAVE_EPOLL

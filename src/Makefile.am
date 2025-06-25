@@ -322,6 +322,10 @@ if HAVE_EPOLL
 SRCS += EpollEventPoll.cc EpollEventPoll.h
 endif # HAVE_EPOLL
 
+if HAVE_LIBURING
+SRCS += IoUringEventPoll.cc IoUringEventPoll.h IoUringDiskWriter.cc IoUringDiskWriter.h IoUringDiskWriterFactory.cc IoUringDiskWriterFactory.h
+endif # HAVE_LIBURING
+
 if ENABLE_SSL
 SRCS += TLSContext.h TLSSession.h
 endif # ENABLE_SSL
@@ -723,24 +727,25 @@ AM_LDFLAGS = \
 	@APPLETLS_LDFLAGS@
 
 EXTLDADD = @ALLOCA@ \
-	@EXTRALIBS@ \
-	@ZLIB_LIBS@ \
-	@LIBUV_LIBS@ \
-	@LIBXML2_LIBS@ \
-	@EXPAT_LIBS@ \
-	@SQLITE3_LIBS@ \
-	@WINTLS_LIBS@ \
-	@LIBGNUTLS_LIBS@ \
-	@OPENSSL_LIBS@ \
-	@LIBNETTLE_LIBS@ \
-	@LIBGMP_LIBS@ \
-	@LIBGCRYPT_LIBS@ \
-	@LIBSSH2_LIBS@ \
-	@LIBCARES_LIBS@ \
-	@WSLAY_LIBS@ \
-	@TCMALLOC_LIBS@ \
-	@JEMALLOC_LIBS@ \
-	@LTLIBINTL@
+        @EXTRALIBS@ \
+        @ZLIB_LIBS@ \
+        @LIBUV_LIBS@ \
+        @LIBXML2_LIBS@ \
+        @EXPAT_LIBS@ \
+        @SQLITE3_LIBS@ \
+        @WINTLS_LIBS@ \
+        @LIBGNUTLS_LIBS@ \
+        @OPENSSL_LIBS@ \
+        @LIBNETTLE_LIBS@ \
+        @LIBGMP_LIBS@ \
+        @LIBGCRYPT_LIBS@ \
+        @LIBSSH2_LIBS@ \
+        @LIBCARES_LIBS@ \
+        @WSLAY_LIBS@ \
+        @TCMALLOC_LIBS@ \
+        @JEMALLOC_LIBS@ \
+        @LIBURING_LIBS@ \
+        @LTLIBINTL@
 
 LDADD = libaria2.la
 

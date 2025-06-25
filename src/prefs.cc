@@ -141,6 +141,7 @@ const std::string V_KQUEUE("kqueue");
 const std::string V_PORT("port");
 const std::string V_POLL("poll");
 const std::string V_SELECT("select");
+const std::string V_IOURING("iouring");
 const std::string V_BINARY("binary");
 const std::string V_ASCII("ascii");
 const std::string V_GET("get");

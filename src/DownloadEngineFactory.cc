@@ -73,6 +73,9 @@
 #ifdef HAVE_POLL
 #  include "PollEventPoll.h"
 #endif // HAVE_POLL
+#ifdef HAVE_LIBURING
+#  include "IoUringEventPoll.h"
+#endif // HAVE_LIBURING
 #include "SelectEventPoll.h"
 #include "DlAbortEx.h"
 #include "FileAllocationEntry.h"
@@ -87,6 +90,17 @@ namespace {
 std::unique_ptr<EventPoll> createEventPoll(Option* op)
 {
   const std::string& pollMethod = op->get(PREF_EVENT_POLL);
+#ifdef HAVE_LIBURING
+  if (pollMethod == V_IOURING) {
+    auto ep = make_unique<IoUringEventPoll>();
+    if (!ep->good()) {
+      throw DL_ABORT_EX("Initializing IoUringEventPoll failed."
+                        " Try --event-poll=epoll");
+    }
+    return std::move(ep);
+  }
+  else
+#endif // HAVE_LIBURING
 #ifdef HAVE_LIBUV
   if (pollMethod == V_LIBUV) {
     auto ep = make_unique<LibuvEventPoll>();

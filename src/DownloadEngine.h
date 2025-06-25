@@ -229,6 +229,8 @@ public:
 
   void setOption(Option* op) { option_ = op; }
 
+  EventPoll* getEventPoll() const { return eventPoll_.get(); }
+
   void setStatCalc(std::unique_ptr<StatCalc> statCalc);
 
   bool isHaltRequested() const { return haltRequested_; }
