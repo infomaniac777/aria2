@@ -516,6 +516,15 @@ std::vector<OptionHandler*> OptionHandlerFactory::createOptionHandlers()
     op->addTag(TAG_ADVANCED);
     handlers.push_back(op);
   }
+#ifdef HAVE_KTLS
+  {
+    OptionHandler* op(new BooleanOptionHandler(
+        PREF_ENABLE_KTLS, TEXT_ENABLE_KTLS, A2_V_FALSE,
+        OptionHandler::OPT_ARG));
+    op->addTag(TAG_ADVANCED);
+    handlers.push_back(op);
+  }
+#endif // HAVE_KTLS
 #endif // ENABLE_SSL
   {
     OptionHandler* op(new DefaultOptionHandler(

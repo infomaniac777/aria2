@@ -46,6 +46,11 @@
 #include "fmt.h"
 #include "message.h"
 #include "BufferedFile.h"
+#ifdef HAVE_KTLS
+#  include "KTLSContext.h"
+#  include "Option.h"
+#  include "prefs.h"
+#endif // HAVE_KTLS
 
 namespace {
 struct bio_deleter {
@@ -94,6 +99,17 @@ namespace aria2 {
 
 TLSContext* TLSContext::make(TLSSessionSide side, TLSVersion minVer)
 {
+  return new OpenSSLTLSContext(side, minVer);
+}
+
+TLSContext* TLSContext::make(TLSSessionSide side, TLSVersion minVer, const Option* option)
+{
+#ifdef HAVE_KTLS
+  if (option && option->getAsBool(PREF_ENABLE_KTLS)) {
+    A2_LOG_INFO("Creating kTLS context");
+    return new KTLSContext(side, minVer);
+  }
+#endif // HAVE_KTLS
   return new OpenSSLTLSContext(side, minVer);
 }
 

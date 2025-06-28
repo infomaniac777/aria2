@@ -191,7 +191,7 @@ int MultiUrlRequestInfo::prepare()
       // DownloadEngine instance.
       auto minTLSVer = util::toTLSVersion(option_->get(PREF_MIN_TLS_VERSION));
       std::shared_ptr<TLSContext> svTlsContext(
-          TLSContext::make(TLS_SERVER, minTLSVer));
+          TLSContext::make(TLS_SERVER, minTLSVer, option_.get()));
       if (!svTlsContext->addCredentialFile(
               option_->get(PREF_RPC_CERTIFICATE),
               option_->get(PREF_RPC_PRIVATE_KEY))) {
@@ -252,7 +252,7 @@ int MultiUrlRequestInfo::prepare()
 #ifdef ENABLE_SSL
     auto minTLSVer = util::toTLSVersion(option_->get(PREF_MIN_TLS_VERSION));
     std::shared_ptr<TLSContext> clTlsContext(
-        TLSContext::make(TLS_CLIENT, minTLSVer));
+        TLSContext::make(TLS_CLIENT, minTLSVer, option_.get()));
     if (!option_->blank(PREF_CERTIFICATE)) {
       clTlsContext->addCredentialFile(option_->get(PREF_CERTIFICATE),
                                       option_->get(PREF_PRIVATE_KEY));

@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 #
 AC_PREREQ([2.67])
-AC_INIT([aria2],[1.37.0],[https://github.com/aria2/aria2/issues],[aria2],[https://aria2.github.io/])
+AC_INIT([aria2],[1.4],[https://github.com/aria2/aria2/issues],[aria2],[https://aria2.github.io/])
 
 AC_CANONICAL_HOST
 AC_CANONICAL_TARGET
@@ -403,12 +403,25 @@ if test "x$with_gnutls" = "xyes" && test "x$have_ssl" != "xyes"; then
 fi
 
 have_openssl=no
+have_openssl3=no
 if test "x$with_openssl" = "xyes" && test "x$have_ssl" != "xyes"; then
-  PKG_CHECK_MODULES([OPENSSL], [openssl >= 0.9.8],
-                    [have_openssl=yes], [have_openssl=no])
+  # First try OpenSSL 3.0+ for kTLS support
+  PKG_CHECK_MODULES([OPENSSL], [openssl >= 3.0.0],
+                    [have_openssl=yes; have_openssl3=yes], [have_openssl3=no])
+  
+  # Fallback to older OpenSSL if 3.0+ not available
+  if test "x$have_openssl3" = "xno"; then
+    PKG_CHECK_MODULES([OPENSSL], [openssl >= 0.9.8],
+                      [have_openssl=yes], [have_openssl=no])
+  fi
+  
   if test "x$have_openssl" = "xyes"; then
     have_ssl=yes
     AC_DEFINE([HAVE_OPENSSL], [1], [Define to 1 if you have openssl.])
+    
+    if test "x$have_openssl3" = "xyes"; then
+      AC_DEFINE([HAVE_OPENSSL3], [1], [Define to 1 if you have OpenSSL 3.0+.])
+    fi
 
     save_LIBS=$LIBS
     LIBS="$OPENSSL_LIBS $LIBS"
@@ -420,6 +433,15 @@ if test "x$with_openssl" = "xyes" && test "x$have_ssl" != "xyes"; then
     AC_CHECK_FUNCS([EVP_sha256])
     AC_CHECK_FUNCS([EVP_sha384])
     AC_CHECK_FUNCS([EVP_sha512])
+    
+    # Check for kTLS-specific functions in OpenSSL 3.0+
+    if test "x$have_openssl3" = "xyes"; then
+      AC_CHECK_FUNCS([SSL_set_options])
+      AC_CHECK_DECL([SSL_OP_ENABLE_KTLS], [
+        AC_DEFINE([HAVE_OPENSSL_KTLS], [1], [Define to 1 if OpenSSL has built-in kTLS support.])
+      ], [], [#include <openssl/ssl.h>])
+    fi
+    
     LIBS=$save_LIBS
   else
     AC_MSG_WARN([$OPENSSL_PKG_ERRORS])
@@ -427,6 +449,43 @@ if test "x$with_openssl" = "xyes" && test "x$have_ssl" != "xyes"; then
       ARIA2_DEP_NOT_MET([openssl])
     fi
   fi
+fi
+
+# Check for kTLS support on Linux
+have_ktls=no
+AC_ARG_ENABLE([ktls],
+              AS_HELP_STRING([--enable-ktls],
+                             [Enable kernel TLS support on Linux (default: auto, requires OpenSSL 3.0+)]),
+              [enable_ktls=$enableval], [enable_ktls=auto])
+
+if test "x$enable_ktls" != "xno" && test "x$have_openssl" = "xyes"; then
+  case "$host" in
+    *linux*)
+      if test "x$have_openssl3" = "xyes"; then
+        # OpenSSL 3.0+ has built-in kTLS support
+        AC_CHECK_HEADERS([linux/tls.h], [
+          AC_CHECK_DECL([TCP_ULP], [
+            have_ktls=yes
+            AC_DEFINE([HAVE_KTLS], [1], [Define to 1 if kernel TLS support is available.])
+          ], [], [
+            #include <sys/socket.h>
+            #include <netinet/tcp.h>
+          ])
+        ])
+      else
+        if test "x$enable_ktls" = "xyes"; then
+          AC_MSG_ERROR([kTLS requires OpenSSL 3.0+, but OpenSSL 3.0+ was not found])
+        else
+          AC_MSG_WARN([kTLS requires OpenSSL 3.0+, disabling kTLS support])
+        fi
+      fi
+      ;;
+    *)
+      if test "x$enable_ktls" = "xyes"; then
+        AC_MSG_ERROR([kTLS is only supported on Linux])
+      fi
+      ;;
+  esac
 fi
 
 have_libnettle=no
@@ -563,6 +622,7 @@ AM_CONDITIONAL([HAVE_LIBGMP], [ test "x$have_libgmp" = "xyes" ])
 AM_CONDITIONAL([HAVE_LIBGCRYPT], [ test "x$have_libgcrypt" = "xyes" ])
 AM_CONDITIONAL([USE_LIBGCRYPT_MD], [ test "x$use_md" = "xlibgcrypt"])
 AM_CONDITIONAL([HAVE_OPENSSL], [ test "x$have_openssl" = "xyes" ])
+AM_CONDITIONAL([HAVE_KTLS], [ test "x$have_ktls" = "xyes" ])
 AM_CONDITIONAL([USE_OPENSSL_MD], [ test "x$use_md" = "xopenssl"])
 AM_CONDITIONAL([USE_INTERNAL_MD], [ test "x$use_md" = "xinternal"])
 
@@ -1096,6 +1156,8 @@ AppleTLS:       $have_appletls (LDFLAGS='$APPLETLS_LDFLAGS')
 WinTLS:         $have_wintls (LIBS='$WINTLS_LIBS')
 GnuTLS:         $have_libgnutls (CFLAGS='$LIBGNUTLS_CFLAGS' LIBS='$LIBGNUTLS_LIBS')
 OpenSSL:        $have_openssl (CFLAGS='$OPENSSL_CFLAGS' LIBS='$OPENSSL_LIBS')
+OpenSSL 3.0+:   $have_openssl3
+kTLS:           $have_ktls
 CA Bundle:      $ca_bundle
 LibNettle:      $have_libnettle (CFLAGS='$LIBNETTLE_CFLAGS' LIBS='$LIBNETTLE_LIBS')
 LibGmp:         $have_libgmp (CFLAGS='$LIBGMP_CFLAGS' LIBS='$LIBGMP_LIBS')

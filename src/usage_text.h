@@ -1069,6 +1069,11 @@
     "                              recognized as active download in RPC method.")
 #define TEXT_MIN_TLS_VERSION                                            \
   _(" --min-tls-version=VERSION    Specify minimum SSL/TLS version to enable.")
+#define TEXT_ENABLE_KTLS                                                \
+  _(" --enable-ktls[=true|false]   Enable kernel TLS (kTLS) support on Linux.\n" \
+    "                              This moves TLS encryption/decryption to the\n" \
+    "                              kernel for improved performance. Falls back to\n" \
+    "                              OpenSSL if kTLS is unavailable.")
 #define TEXT_BT_FORCE_ENCRYPTION                                        \
   _(" --bt-force-encryption[=true|false]\n"                             \
     "                              Requires BitTorrent message payload encryption\n" \

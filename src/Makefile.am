@@ -399,6 +399,12 @@ SRCS += LibsslMessageDigestImpl.cc
 endif
 endif # HAVE_OPENSSL
 
+if HAVE_KTLS
+SRCS += \
+	KTLSContext.cc KTLSContext.h \
+        KTLSSession.cc KTLSSession.h
+endif # HAVE_KTLS
+
 if HAVE_ZLIB
 SRCS += \
 	GZipDecodingStreamFilter.cc GZipDecodingStreamFilter.h\

@@ -36,6 +36,7 @@
 #define D_ABSTRACT_DISK_WRITER_H
 
 #include "DiskWriter.h"
+#include "a2io.h"
 #include <string>
 
 namespace aria2 {
@@ -102,6 +103,15 @@ public:
   virtual void dropCache(int64_t len, int64_t offset) CXX11_OVERRIDE;
 
   virtual void flushOSBuffers() CXX11_OVERRIDE;
+
+protected:
+  // Allow access to file descriptor for zero-copy operations
+#ifdef __MINGW32__
+  HANDLE getFd() const { return fd_; }
+#else
+  int getFd() const { return fd_; }
+#endif
+  bool isOpen() const { return fd_ != A2_BAD_FD; }
 };
 
 } // namespace aria2

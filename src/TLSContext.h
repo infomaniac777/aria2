@@ -50,9 +50,12 @@ enum TLSVersion {
   TLS_PROTO_TLS13,
 };
 
+class Option;
+
 class TLSContext {
 public:
   static TLSContext* make(TLSSessionSide side, TLSVersion minVer);
+  static TLSContext* make(TLSSessionSide side, TLSVersion minVer, const Option* option);
   virtual ~TLSContext() = default;
 
   // private key `keyfile' must be decrypted.

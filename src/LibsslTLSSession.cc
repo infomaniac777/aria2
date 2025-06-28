@@ -41,6 +41,10 @@
 #include "LogFactory.h"
 #include "util.h"
 #include "SocketCore.h"
+#ifdef HAVE_KTLS
+#include "KTLSContext.h"
+#include "KTLSSession.h"
+#endif // HAVE_KTLS
 
 namespace aria2 {
 
@@ -55,6 +59,14 @@ const unsigned char* ASN1_STRING_get0_data(ASN1_STRING* x)
 
 TLSSession* TLSSession::make(TLSContext* ctx)
 {
+#ifdef HAVE_KTLS
+  // Check if this is a kTLS context
+  auto ktlsCtx = dynamic_cast<KTLSContext*>(ctx);
+  if (ktlsCtx) {
+    return new KTLSSession(ktlsCtx);
+  }
+#endif // HAVE_KTLS
+  
   return new OpenSSLTLSSession(static_cast<OpenSSLTLSContext*>(ctx));
 }
 

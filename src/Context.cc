@@ -180,6 +180,11 @@ Context::Context(bool standalone, int argc, char** argv, const KeyVals& options)
   A2_LOG_INFO("  --- --- --- ---");
   A2_LOG_INFO("  --- --- --- --->>");
   A2_LOG_INFO(fmt("%s %s", PACKAGE, PACKAGE_VERSION));
+#ifdef HAVE_KTLS
+  A2_LOG_INFO("kTLS support: ENABLED");
+#else
+  A2_LOG_INFO("kTLS support: DISABLED");
+#endif
   A2_LOG_INFO(usedCompilerAndPlatform());
   A2_LOG_INFO(getOperatingSystemInfo());
   A2_LOG_INFO(usedLibs());
