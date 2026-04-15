@@ -45,3 +45,6 @@ main.log
 main.trs
 test-suite.log
 .cache/
+# macOS metadata
+.DS_Store
+._.DS_Store
